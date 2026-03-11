@@ -4,23 +4,36 @@ Technical Analysis Stock Scanner
 Scans NASDAQ 100, S&P 500 and DAX 40 for short-term trading signals (1-5 day horizon).
 """
 
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import time
+import argparse
 import logging
-import webbrowser
+import re
+import sys
+import time
 import warnings
+import webbrowser
 from datetime import datetime
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
 
 warnings.filterwarnings("ignore")
 
 # ---------------------------------------------------------------------------
+# Konstanten
+# ---------------------------------------------------------------------------
+
+MIN_AVG_VOLUME = 500_000  # Mindest-Durchschnittsvolumen (20 Tage)
+
+# ---------------------------------------------------------------------------
 # Logging setup
 # ---------------------------------------------------------------------------
+LOG_DIR = Path(__file__).parent / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / "scan_errors.log"
 logging.basicConfig(
-    filename="scan_errors.log",
+    filename=str(LOG_FILE),
     level=logging.ERROR,
     format="%(asctime)s  %(levelname)s  %(message)s",
 )
@@ -129,7 +142,36 @@ COUNTRY_TO_SUFFIX = {
 }
 
 import io
+import json
 import urllib.request
+
+TICKER_SOURCES: dict[str, tuple[str, int]] = {}
+
+
+def _set_source(list_name: str, source: str, count: int) -> None:
+    TICKER_SOURCES[list_name] = (source, count)
+
+
+def filter_valid_tickers(tickers: list, label: str) -> list:
+    """
+    Entfernt ungültige Ticker (kein valides Symbolformat).
+    Erlaubt Buchstaben/Ziffern sowie . und -; muss mit alnum starten.
+    """
+    pattern = re.compile(r"^[A-Z0-9][A-Z0-9.\-]+$")
+    valid = []
+    invalid = 0
+    for t in tickers:
+        t = str(t).strip().upper()
+        if not t:
+            invalid += 1
+            continue
+        if pattern.match(t):
+            valid.append(t)
+        else:
+            invalid += 1
+    if invalid:
+        print(f"  Hinweis: {label} – {invalid} ungültige Ticker entfernt.")
+    return valid
 
 
 def _fetch_html(url: str) -> str | None:
@@ -172,7 +214,9 @@ def get_nasdaq100_tickers() -> list:
                 tickers = t[col].dropna().tolist()
                 tickers = [str(x).strip().replace(".", "-") for x in tickers if str(x).strip()]
                 if len(tickers) > 50:
+                    _set_source("NASDAQ 100", "wiki", len(tickers))
                     return tickers
+    _set_source("NASDAQ 100", "fallback", len(NASDAQ100_FALLBACK))
     return NASDAQ100_FALLBACK
 
 
@@ -184,7 +228,9 @@ def get_sp500_tickers() -> list:
                 tickers = t[col].dropna().tolist()
                 tickers = [str(x).strip().replace(".", "-") for x in tickers if str(x).strip()]
                 if len(tickers) > 400:
+                    _set_source("S&P 500", "wiki", len(tickers))
                     return tickers
+    _set_source("S&P 500", "fallback", len(SP500_FALLBACK))
     return SP500_FALLBACK
 
 
@@ -197,7 +243,9 @@ def get_dax40_tickers() -> list:
                 tickers = [str(x).strip() for x in tickers if str(x).strip()]
                 tickers = [x if x.endswith(".DE") else x + ".DE" for x in tickers]
                 if len(tickers) >= 30:
+                    _set_source("DAX 40", "wiki", len(tickers))
                     return tickers
+    _set_source("DAX 40", "fallback", len(DAX40_FALLBACK))
     return DAX40_FALLBACK
 
 
@@ -238,7 +286,9 @@ def get_eurostoxx50_tickers() -> list:
             else:
                 result.append(ticker)
         if len(result) >= 40:
+            _set_source("Euro Stoxx 50", "wiki", len(result))
             return result
+    _set_source("Euro Stoxx 50", "fallback", len(EUROSTOXX50_FALLBACK))
     return EUROSTOXX50_FALLBACK
 
 
@@ -249,7 +299,9 @@ def get_tecdax_tickers() -> list:
             if "ticker" in str(col).lower() or "symbol" in str(col).lower():
                 tickers = _add_de_suffix(t[col].dropna().tolist())
                 if len(tickers) >= 20:
+                    _set_source("TecDAX", "wiki", len(tickers))
                     return tickers
+    _set_source("TecDAX", "fallback", len(TECDAX_FALLBACK))
     return TECDAX_FALLBACK
 
 
@@ -260,7 +312,9 @@ def get_mdax_tickers() -> list:
             if "ticker" in str(col).lower() or "symbol" in str(col).lower():
                 tickers = _add_de_suffix(t[col].dropna().tolist())
                 if len(tickers) >= 30:
+                    _set_source("MDAX", "wiki", len(tickers))
                     return tickers
+    _set_source("MDAX", "fallback", len(MDAX_FALLBACK))
     return MDAX_FALLBACK
 
 
@@ -271,7 +325,9 @@ def get_sdax_tickers() -> list:
             if "ticker" in str(col).lower() or "symbol" in str(col).lower():
                 tickers = _add_de_suffix(t[col].dropna().tolist())
                 if len(tickers) >= 50:
+                    _set_source("SDAX", "wiki", len(tickers))
                     return tickers
+    _set_source("SDAX", "fallback", len(SDAX_FALLBACK))
     return SDAX_FALLBACK
 
 
@@ -407,6 +463,35 @@ def detect_candlestick_patterns(df: pd.DataFrame) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Fear & Greed Index
+# ---------------------------------------------------------------------------
+
+def get_fear_greed() -> dict:
+    """Holt CNN Fear & Greed Index (0–100). Fallback: neutral."""
+    try:
+        req = urllib.request.Request(
+            "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            value = round(float(data["fear_and_greed"]["score"]))
+            if value <= 20:
+                label = "Extreme Angst"
+            elif value <= 40:
+                label = "Angst"
+            elif value <= 60:
+                label = "Neutral"
+            elif value <= 80:
+                label = "Gier"
+            else:
+                label = "Extreme Gier"
+            return {"value": value, "label": label}
+    except Exception:
+        return {"value": 50, "label": "Neutral (Fallback)"}
+
+
+# ---------------------------------------------------------------------------
 # Core analysis function
 # ---------------------------------------------------------------------------
 
@@ -440,6 +525,19 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
         current_price = float(close.iloc[-1])
         prev_price = float(close.iloc[-2])
         pct_change = (current_price - prev_price) / prev_price * 100
+
+        # --- Mindest-Liquidität ---
+        avg_vol_20 = float(volume.rolling(20).mean().iloc[-1])
+        if avg_vol_20 < MIN_AVG_VOLUME:
+            return None
+
+        # --- ATR (wird früh benötigt für Squeeze-Keltner) ---
+        tr_s = pd.concat(
+            [high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1
+        ).max(axis=1)
+        atr_series = tr_s.rolling(14).mean()
+        atr_val = float(atr_series.iloc[-1])
+        atr_pct = round(atr_val / current_price * 100, 2)
 
         buy_signals = 0
         sell_signals = 0
@@ -510,7 +608,7 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
         avg_bb_width = float(
             ((bb_upper - bb_lower) / bb_mid).rolling(20).mean().iloc[-1]
         )
-        squeeze = bb_width < avg_bb_width * 0.8
+        squeeze = not np.isnan(avg_bb_width) and bb_width < avg_bb_width * 0.8
 
         if current_price < bb_lower_val:
             buy_signals += 1
@@ -526,7 +624,6 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
         signal_details["Bollinger"] = bb_signal
 
         # --- Volume ---
-        avg_vol_20 = float(volume.rolling(20).mean().iloc[-1])
         curr_vol = float(volume.iloc[-1])
         vol_ratio = curr_vol / avg_vol_20 if avg_vol_20 > 0 else 1.0
 
@@ -551,14 +648,45 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
             sell_signals += 1
         signal_details["Candlestick"] = candle_result["pattern"] if candle_result["pattern"] != "none" else "neutral"
 
-        net_score = buy_signals - sell_signals
+        # --- VWAP (20-Tages gewichteter Durchschnitt) ---
+        typical_price = (high + low + close) / 3
+        vol_20 = volume.tail(20)
+        tp_20 = typical_price.tail(20)
+        vwap_val = float((tp_20 * vol_20).sum() / vol_20.sum()) if float(vol_20.sum()) > 0 else current_price
+        if current_price > vwap_val:
+            buy_signals += 1
+            vwap_signal = f"BUY ({vwap_val:.2f})"
+        else:
+            sell_signals += 1
+            vwap_signal = f"SELL ({vwap_val:.2f})"
+        signal_details["VWAP"] = vwap_signal
 
-        # --- ATR ---
-        tr_s    = pd.concat(
-            [high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1
-        ).max(axis=1)
-        atr_val = float(tr_s.rolling(14).mean().iloc[-1])
-        atr_pct = round(atr_val / current_price * 100, 2)
+        # --- Squeeze Momentum (Lazybear-Methode) ---
+        ema20 = close.ewm(span=20, adjust=False).mean()
+        kc_upper = ema20 + 1.5 * atr_series
+        kc_lower = ema20 - 1.5 * atr_series
+        sq_on = (float(bb_upper.iloc[-1]) < float(kc_upper.iloc[-1])) and \
+                (float(bb_lower.iloc[-1]) > float(kc_lower.iloc[-1]))
+        highest_high_20 = high.rolling(20).max()
+        lowest_low_20 = low.rolling(20).min()
+        delta_close = close - ((highest_high_20 + lowest_low_20) / 2 + ema20) / 2
+        dc_tail = delta_close.tail(5).values
+        squeeze_momentum = 0.0
+        if len(dc_tail) == 5 and not np.any(np.isnan(dc_tail)):
+            coeffs = np.polyfit(np.arange(5), dc_tail, 1)
+            squeeze_momentum = float(np.polyval(coeffs, 4))
+
+        if not sq_on and squeeze_momentum > 0:
+            buy_signals += 1
+            sq_signal = f"BUY (mom={squeeze_momentum:.3f})"
+        elif not sq_on and squeeze_momentum < 0:
+            sell_signals += 1
+            sq_signal = f"SELL (mom={squeeze_momentum:.3f})"
+        else:
+            sq_signal = f"Squeeze {'ON' if sq_on else 'OFF'}"
+        signal_details["Squeeze"] = sq_signal
+
+        net_score = buy_signals - sell_signals
 
         # --- ADX ---
         adx_s, plus_di_s, minus_di_s = compute_adx(high, low, close)
@@ -569,31 +697,36 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
         # --- Größter Tages-Move der letzten 5 Tage (Gap-Filter) ---
         recent_max_gap = float(close.pct_change().tail(5).abs().max()) * 100
 
-        # --- CFD Long Score (6 Kriterien) ---
+        # --- CFD Long Score (7 Kriterien) ---
         cfd_long = 0
-        if adx_val > 25:                               cfd_long += 1  # Starker Trend
-        if 45 <= rsi_val <= 65:                        cfd_long += 1  # Momentum-Zone
-        if curr_hist > 0:                              cfd_long += 1  # MACD bullish
-        if current_price > sma20_val > sma50_val:      cfd_long += 1  # MA-Aufwärtstrend
-        if vol_ratio >= 1.2:                           cfd_long += 1  # Volumen bestätigt
-        if recent_max_gap < 5.0:                       cfd_long += 1  # Kein Spike/Gap
+        if adx_val > 30:                                    cfd_long += 1  # Starker Trend
+        if 45 <= rsi_val <= 65:                             cfd_long += 1  # Momentum-Zone
+        if curr_hist > 0 and curr_hist > prev_hist:         cfd_long += 1  # MACD steigend
+        if current_price > sma20_val > sma50_val:           cfd_long += 1  # MA-Aufwärtstrend
+        if vol_ratio >= 1.2:                                cfd_long += 1  # Volumen bestätigt
+        if recent_max_gap < 5.0:                            cfd_long += 1  # Kein Spike/Gap
+        if ema9_val > ema21_val:                            cfd_long += 1  # EMA-Stack bullish
 
-        # --- CFD Short Score (6 Kriterien) ---
+        # --- CFD Short Score (7 Kriterien) ---
         cfd_short = 0
-        if adx_val > 25:                               cfd_short += 1
-        if 35 <= rsi_val <= 55:                        cfd_short += 1  # Momentum-Zone Short
-        if curr_hist < 0:                              cfd_short += 1  # MACD bearish
-        if current_price < sma20_val < sma50_val:      cfd_short += 1  # MA-Abwärtstrend
-        if vol_ratio >= 1.2:                           cfd_short += 1
-        if recent_max_gap < 5.0:                       cfd_short += 1
+        if adx_val > 30:                                    cfd_short += 1
+        if 35 <= rsi_val <= 55:                             cfd_short += 1  # Momentum-Zone Short
+        if curr_hist < 0 and curr_hist < prev_hist:         cfd_short += 1  # MACD fallend
+        if current_price < sma20_val < sma50_val:           cfd_short += 1  # MA-Abwärtstrend
+        if vol_ratio >= 1.2:                                cfd_short += 1
+        if recent_max_gap < 5.0:                            cfd_short += 1
+        if ema9_val < ema21_val:                            cfd_short += 1  # EMA-Stack bearish
 
-        # --- ATR-basierte Stop/Target-Level ---
+        # --- ATR-basierte Stop/Target-Level (TP2 = 4×ATR, R/R 2.67:1) ---
         stop_long   = round(current_price - 1.5 * atr_val, 2)
         tp1_long    = round(current_price + 1.5 * atr_val, 2)
-        tp2_long    = round(current_price + 3.0 * atr_val, 2)
+        tp2_long    = round(current_price + 4.0 * atr_val, 2)
         stop_short  = round(current_price + 1.5 * atr_val, 2)
         tp1_short   = round(current_price - 1.5 * atr_val, 2)
-        tp2_short   = round(current_price - 3.0 * atr_val, 2)
+        tp2_short   = round(current_price - 4.0 * atr_val, 2)
+
+        # --- RVOL Label ---
+        rvol_label = "🔥 Hoch" if vol_ratio > 2.0 else "↑ Erhöht" if vol_ratio > 1.5 else "— Normal"
 
         # Use ticker as name (avoids extra API call per ticker)
         name = ticker
@@ -612,6 +745,8 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
             "bollinger": signal_details.get("Bollinger", "-"),
             "volume": signal_details.get("Volume", "-"),
             "candlestick": signal_details.get("Candlestick", "-"),
+            "vwap": signal_details.get("VWAP", "-"),
+            "squeeze": signal_details.get("Squeeze", "-"),
             "price": round(current_price, 2),
             "pct_change": round(pct_change, 2),
             # CFD-Felder
@@ -619,6 +754,7 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
             "atr_pct": atr_pct,
             "adx": round(adx_val, 1),
             "vol_ratio": round(vol_ratio, 2),
+            "rvol_label": rvol_label,
             "recent_max_gap": round(recent_max_gap, 1),
             "cfd_long_score": cfd_long,
             "cfd_short_score": cfd_short,
@@ -640,24 +776,28 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 SIGNAL_COLORS_BUY = {
+    8: "#0b3d20",
+    7: "#0b3d20",
     6: "#145a32",
     5: "#1e8449",
     4: "#27ae60",
-    3: "#a9dfbf",
 }
 SIGNAL_COLORS_SELL = {
+    8: "#4a0f0a",
+    7: "#4a0f0a",
     6: "#7b241c",
     5: "#a93226",
     4: "#e74c3c",
-    3: "#f5b7b1",
 }
+
+STRENGTH = {8: "💎 Stark", 7: "💎 Stark", 6: "⭐ Gut", 5: "⭐ Gut", 4: "✓ Ok"}
 
 
 def score_color(score: int, direction: str) -> str:
     abs_score = abs(score)
     if direction == "buy":
-        return SIGNAL_COLORS_BUY.get(min(abs_score, 6), "#eafaf1")
-    return SIGNAL_COLORS_SELL.get(min(abs_score, 6), "#fdedec")
+        return SIGNAL_COLORS_BUY.get(min(abs_score, 8), "#eafaf1")
+    return SIGNAL_COLORS_SELL.get(min(abs_score, 8), "#fdedec")
 
 
 def signal_badge(text: str) -> str:
@@ -678,6 +818,8 @@ def build_row(row: dict, direction: str) -> str:
     score = row["net_score"]
     bg = score_color(score, direction)
     score_text = f"+{score}" if score > 0 else str(score)
+    abs_score = abs(score)
+    strength = STRENGTH.get(abs_score, "")
     pct = row["pct_change"]
     pct_color = "#27ae60" if pct >= 0 else "#e74c3c"
     pct_str = f'<span style="color:{pct_color}">{pct:+.2f}%</span>'
@@ -687,12 +829,15 @@ def build_row(row: dict, direction: str) -> str:
         f'<td>{row["name"]}</td>',
         f'<td>{row["market"]}</td>',
         f'<td style="font-weight:bold;text-align:center">{score_text}</td>',
+        f'<td style="text-align:center">{strength}</td>',
         f'<td style="text-align:center">{row["rsi"]}</td>',
         f'<td style="text-align:center">{signal_badge(row["macd"])}</td>',
         f'<td style="text-align:center">{signal_badge(row["ma"])}</td>',
         f'<td style="text-align:center">{signal_badge(row["bollinger"])}</td>',
         f'<td style="text-align:center">{signal_badge(row["volume"])}</td>',
         f'<td style="text-align:center">{signal_badge(row["candlestick"])}</td>',
+        f'<td style="text-align:center">{signal_badge(row.get("vwap", "-"))}</td>',
+        f'<td style="text-align:center">{signal_badge(row.get("squeeze", "-"))}</td>',
         f'<td style="text-align:right">{row["price"]}</td>',
         f'<td style="text-align:right">{pct_str}</td>',
     ]
@@ -701,8 +846,8 @@ def build_row(row: dict, direction: str) -> str:
 
 
 TABLE_HEADERS = [
-    "Ticker", "Name", "Markt", "Score", "RSI", "MACD",
-    "MA-Trend", "Boll. Bands", "Volume", "Candlestick", "Kurs", "Änderung %",
+    "Ticker", "Name", "Markt", "Score", "Stärke", "RSI", "MACD",
+    "MA-Trend", "Boll. Bands", "Volume", "Candlestick", "VWAP", "Squeeze", "Kurs", "Änderung %",
 ]
 
 
@@ -773,8 +918,8 @@ def build_summary(buy_rows: list, sell_rows: list, scan_time: str) -> str:
 
 CFD_HEADERS = [
     "Ticker", "Markt", "Score", "Richtung", "ADX", "RSI",
-    "Einstieg", "Stop (1.5×ATR)", "TP1 (1:1)", "TP2 (2:1)",
-    "R/R", "ATR%", "Gap 5T",
+    "Einstieg", "Stop (1.5×ATR)", "TP1 (1:1)", "TP2 (2.67:1)",
+    "R/R", "ATR%", "Gap 5T", "RVOL",
 ]
 
 
@@ -803,7 +948,7 @@ def build_cfd_row(row: dict, direction: str) -> str:
     cells = "".join([
         f'<td style="font-weight:bold">{row["ticker"]}</td>',
         f'<td style="font-size:0.85em">{row["market"]}</td>',
-        f'<td style="text-align:center;font-weight:bold;color:{score_color}">{score}/6</td>',
+        f'<td style="text-align:center;font-weight:bold;color:{score_color}">{score}/7</td>',
         f'<td style="text-align:center"><span style="background:{dir_color};color:white;'
         f'padding:2px 8px;border-radius:4px;font-size:0.85em">{dir_label}</span></td>',
         f'<td style="text-align:center">{row["adx"]}</td>',
@@ -815,6 +960,7 @@ def build_cfd_row(row: dict, direction: str) -> str:
         f'<td style="text-align:center;font-weight:bold">{rr:.1f}:1</td>',
         f'<td style="text-align:center">{row["atr_pct"]}%</td>',
         f'<td style="text-align:center">{gap_html}</td>',
+        f'<td style="text-align:center">{row.get("rvol_label", "—")}</td>',
     ])
     return f'<tr style="background:{bg}">{cells}</tr>'
 
@@ -834,8 +980,8 @@ def build_cfd_table(cfd_long: list, cfd_short: list) -> str:
   <span style="color:#e74c3c">Short: {total_s}</span>
 </h2>
 <p style="color:#7f8c8d;font-size:0.83em">
-  Score &ge; 4/6 &nbsp;|&nbsp; Kriterien: ADX&gt;25 · RSI-Zone · MACD · MA-Struktur · Volumen · kein Gap &gt;5%
-  &nbsp;|&nbsp; Stop = 1.5×ATR &nbsp;|&nbsp; TP2 = 3×ATR (2:1 R/R)
+  Score &ge; 4/7 &nbsp;|&nbsp; Kriterien: ADX&gt;30 · RSI-Zone · MACD steigend · MA-Struktur · Volumen · kein Gap &gt;5% · EMA-Stack
+  &nbsp;|&nbsp; Stop = 1.5×ATR &nbsp;|&nbsp; TP2 = 4×ATR (2.67:1 R/R)
 </p>
 <div style="overflow-x:auto">
 <table style="width:100%;border-collapse:collapse;font-size:0.88em">
@@ -846,13 +992,35 @@ def build_cfd_table(cfd_long: list, cfd_short: list) -> str:
 """
 
 
+def _fear_greed_badge(fg: dict) -> str:
+    value = fg.get("value", 50)
+    label = fg.get("label", "Neutral")
+    if value <= 20:
+        color, bg = "#fff", "#c0392b"
+    elif value <= 40:
+        color, bg = "#fff", "#e67e22"
+    elif value <= 60:
+        color, bg = "#fff", "#7f8c8d"
+    elif value <= 80:
+        color, bg = "#fff", "#27ae60"
+    else:
+        color, bg = "#fff", "#145a32"
+    return (
+        f'<span style="background:{bg};color:{color};padding:4px 12px;'
+        f'border-radius:6px;font-weight:bold;font-size:1.1em">'
+        f'Fear &amp; Greed: {value} — {label}</span>'
+    )
+
+
 def generate_html(
     buy_rows: list,
     sell_rows: list,
     scan_time: str,
     cfd_long_rows: list | None = None,
     cfd_short_rows: list | None = None,
+    fear_greed: dict | None = None,
 ) -> str:
+    fg_badge = _fear_greed_badge(fear_greed or {"value": 50, "label": "Neutral"})
     summary   = build_summary(buy_rows, sell_rows, scan_time)
     buy_table = build_table(buy_rows, "buy", "KAUFSIGNALE")
     sell_table = build_table(sell_rows, "sell", "VERKAUFSIGNALE")
@@ -871,7 +1039,7 @@ def generate_html(
 </head>
 <body>
 <h1>📊 Technical Analysis Stock Scanner</h1>
-<p style="color:#7f8c8d">Datum: {scan_time} &nbsp;|&nbsp; Signale mit |Score| &ge; 3</p>
+<p style="color:#7f8c8d">Datum: {scan_time} &nbsp;|&nbsp; Signale mit |Score| &ge; 4 &nbsp;|&nbsp; {fg_badge}</p>
 {summary}
 {buy_table}
 {sell_table}
@@ -889,7 +1057,23 @@ def generate_html(
 # Main
 # ---------------------------------------------------------------------------
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Technical Analysis Stock Scanner")
+    parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Kein automatisches Öffnen des HTML-Reports im Browser.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Keine externen API-Calls; erzeugt leeren Report für Smoke-Check.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     start_time = time.time()
     scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{'='*60}")
@@ -897,15 +1081,27 @@ def main():
     print(f"  {scan_time}")
     print(f"{'='*60}\n")
 
-    # --- Load tickers ---
-    print("Lade Ticker-Listen …")
-    nasdaq = get_nasdaq100_tickers()
-    sp500 = get_sp500_tickers()
-    dax = get_dax40_tickers()
-    eurostoxx50 = get_eurostoxx50_tickers()
-    tecdax = get_tecdax_tickers()
-    mdax = get_mdax_tickers()
-    sdax = get_sdax_tickers()
+    # --- Fear & Greed Index ---
+    if args.dry_run:
+        fear_greed = {"value": 50, "label": "Neutral (DryRun)"}
+    else:
+        print("Hole Fear & Greed Index …")
+        fear_greed = get_fear_greed()
+    print(f"Fear & Greed: {fear_greed['value']} ({fear_greed['label']})\n")
+
+    if args.dry_run:
+        print("[DRY-RUN] Keine externen API-Calls. Erzeuge leeren Report …")
+        nasdaq = sp500 = dax = eurostoxx50 = tecdax = mdax = sdax = []
+    else:
+        # --- Load tickers ---
+        print("Lade Ticker-Listen …")
+        nasdaq = filter_valid_tickers(get_nasdaq100_tickers(), "NASDAQ 100")
+        sp500 = filter_valid_tickers(get_sp500_tickers(), "S&P 500")
+        dax = filter_valid_tickers(get_dax40_tickers(), "DAX 40")
+        eurostoxx50 = filter_valid_tickers(get_eurostoxx50_tickers(), "Euro Stoxx 50")
+        tecdax = filter_valid_tickers(get_tecdax_tickers(), "TecDAX")
+        mdax = filter_valid_tickers(get_mdax_tickers(), "MDAX")
+        sdax = filter_valid_tickers(get_sdax_tickers(), "SDAX")
 
     # Deduplicate while preserving source market label
     all_tickers: list[tuple[str, str]] = []
@@ -929,9 +1125,14 @@ def main():
         f"DAX 40={len(dax)}, Euro Stoxx 50={len(eurostoxx50)}, "
         f"TecDAX={len(tecdax)}, MDAX={len(mdax)}, SDAX={len(sdax)}"
     )
+    for list_name in ["NASDAQ 100", "S&P 500", "DAX 40", "Euro Stoxx 50", "TecDAX", "MDAX", "SDAX"]:
+        if list_name in TICKER_SOURCES:
+            source, cnt = TICKER_SOURCES[list_name]
+            print(f"  Quelle {list_name}: {source} ({cnt})")
     print(f"Gesamt eindeutige Ticker: {total}")
-    estimated_minutes = total * 0.35 / 60
-    print(f"Geschätzte Laufzeit: {estimated_minutes:.0f}–{estimated_minutes*1.5:.0f} Minuten\n")
+    if not args.dry_run:
+        estimated_minutes = total * 0.35 / 60
+        print(f"Geschätzte Laufzeit: {estimated_minutes:.0f}–{estimated_minutes*1.5:.0f} Minuten\n")
 
     # Try to use tqdm if available
     try:
@@ -954,14 +1155,14 @@ def main():
         if (idx + 1) % BATCH_SIZE == 0:
             time.sleep(SLEEP_INTERVAL)
 
-    # --- Filter and sort ---
+    # --- Filter and sort (net_score >= 4, Gap <= 3%) ---
     buy_rows = sorted(
-        [r for r in results if r["net_score"] >= 3],
+        [r for r in results if r["net_score"] >= 4 and r["recent_max_gap"] <= 3.0],
         key=lambda r: r["net_score"],
         reverse=True,
     )
     sell_rows = sorted(
-        [r for r in results if r["net_score"] <= -3],
+        [r for r in results if r["net_score"] <= -4 and r["recent_max_gap"] <= 3.0],
         key=lambda r: r["net_score"],
     )
 
@@ -969,7 +1170,7 @@ def main():
     print(f"\nScan abgeschlossen in {elapsed:.0f}s ({elapsed/60:.1f} Min)")
     print(f"Kaufsignale:     {len(buy_rows)}")
     print(f"Verkaufsignale:  {len(sell_rows)}")
-    print(f"Fehler geloggt:  scan_errors.log\n")
+    print(f"Fehler geloggt:  {LOG_FILE}\n")
 
     # --- Terminal summary ---
     print("TOP 5 KAUFSIGNALE:")
@@ -994,12 +1195,12 @@ def main():
 
     print("\nTOP 5 CFD LONG:")
     for r in cfd_long_rows[:5]:
-        print(f"  {r['ticker']:10s}  CFD={r['cfd_long_score']}/6  ADX={r['adx']}  RSI={r['rsi']}  "
+        print(f"  {r['ticker']:10s}  CFD={r['cfd_long_score']}/7  ADX={r['adx']}  RSI={r['rsi']}  "
               f"Stop={r['stop_long']}  TP2={r['tp2_long']}")
 
     print("\nTOP 5 CFD SHORT:")
     for r in cfd_short_rows[:5]:
-        print(f"  {r['ticker']:10s}  CFD={r['cfd_short_score']}/6  ADX={r['adx']}  RSI={r['rsi']}  "
+        print(f"  {r['ticker']:10s}  CFD={r['cfd_short_score']}/7  ADX={r['adx']}  RSI={r['rsi']}  "
               f"Stop={r['stop_short']}  TP2={r['tp2_short']}")
 
     # --- Output-Verzeichnis mit Datum ---
@@ -1009,7 +1210,7 @@ def main():
 
     # --- Write HTML ---
     html_path = output_dir / "trading_signals.html"
-    html_content = generate_html(buy_rows, sell_rows, scan_time, cfd_long_rows, cfd_short_rows)
+    html_content = generate_html(buy_rows, sell_rows, scan_time, cfd_long_rows, cfd_short_rows, fear_greed)
     html_path.write_text(html_content, encoding="utf-8")
     Path("trading_signals.html").write_text(html_content, encoding="utf-8")
     print(f"\nHTML-Bericht: {html_path.resolve()}")
@@ -1033,11 +1234,19 @@ def main():
         pd.DataFrame(cfd_all).to_csv("cfd_setups.csv", index=False, encoding="utf-8-sig")
         print(f"CFD-CSV:      {cfd_csv.resolve()}")
 
-    # --- Open browser (nur interaktiv) ---
+    # --- Dashboard Push ---
     try:
-        webbrowser.open(html_path.resolve().as_uri())
-    except Exception:
-        pass
+        from post_to_dashboard import post_to_dashboard
+        post_to_dashboard(str(output_dir), fear_greed)
+    except Exception as e:
+        print(f"Dashboard-Push übersprungen: {e}")
+
+    # --- Open browser (nur interaktiv) ---
+    if not args.no_open and sys.stdout.isatty():
+        try:
+            webbrowser.open(html_path.resolve().as_uri())
+        except Exception:
+            pass
 
     print("\nFertig!")
 

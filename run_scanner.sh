@@ -19,8 +19,12 @@ EXIT_CODE=$?
 
 echo "Ende: $(date '+%Y-%m-%d %H:%M:%S')  (Exit: $EXIT_CODE)" >> "$LOG_FILE"
 
-# E-Mail-Report senden
+# Dashboard Push + E-Mail-Report
 if [ $EXIT_CODE -eq 0 ]; then
+    # Dashboard-Push (stock_scanner.py macht das bereits intern — nur Fallback)
+    # echo "Pushe Dashboard-Daten ..." >> "$LOG_FILE"
+    # /usr/bin/python3 "$SCRIPT_DIR/post_to_dashboard.py" >> "$LOG_FILE" 2>&1
+
     echo "Sende E-Mail-Report ..." >> "$LOG_FILE"
     /usr/bin/python3 "$SCRIPT_DIR/send_report.py" >> "$LOG_FILE" 2>&1
     if [ $? -eq 0 ]; then
