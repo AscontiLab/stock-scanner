@@ -375,18 +375,26 @@ def cli_open():
         print("Keine offenen Signale.")
         return
 
-    print(f"\n{'='*80}")
+    print(f"\n{'='*100}")
     print(f"  OFFENE CFD-SIGNALE ({len(rows)})")
-    print(f"{'='*80}\n")
-    print(f"{'Datum':<12} {'Ticker':<10} {'Dir':<6} {'Score':>6} {'ADX':>5} {'RSI':>5} "
-          f"{'Entry':>8} {'Stop':>8} {'TP1':>8} {'TP2':>8}")
-    print("-" * 80)
+    print(f"{'='*100}\n")
+    fmt = "{:<12s} {:<8s} {:<6s} {:>5s} {:>6s} {:>6s} {:>10s} {:>10s} {:>10s} {:>10s}"
+    print(fmt.format("Datum", "Ticker", "Dir", "Score", "ADX", "RSI",
+                      "Entry", "Stop", "TP1", "TP2"))
+    print("-" * 100)
     for r in rows:
-        print(f"{r['scan_date'] if r['scan_date'] else '?':<12} "  # noqa: E501
-              f"{r['ticker']:<10} {r['direction']:<6} "
-              f"{r['quality_score']:>6.1f} {r['adx'] or 0:>5.1f} {r['rsi'] or 0:>5.1f} "
-              f"{r['entry_price']:>8.2f} {r['stop_price']:>8.2f} "
-              f"{r['tp1_price']:>8.2f} {r['tp2_price']:>8.2f}")
+        print(fmt.format(
+            r['scan_date'] or '?',
+            r['ticker'],
+            r['direction'],
+            f"{r['quality_score']:.1f}",
+            f"{r['adx'] or 0:.1f}",
+            f"{r['rsi'] or 0:.1f}",
+            f"{r['entry_price']:.2f}",
+            f"{r['stop_price']:.2f}",
+            f"{r['tp1_price']:.2f}",
+            f"{r['tp2_price']:.2f}",
+        ))
 
 
 def cli_summary():
