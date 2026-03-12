@@ -378,10 +378,10 @@ def cli_open():
     print(f"\n{'='*100}")
     print(f"  OFFENE CFD-SIGNALE ({len(rows)})")
     print(f"{'='*100}\n")
-    fmt = "{:<12s} {:<8s} {:<6s} {:>5s} {:>6s} {:>6s} {:>10s} {:>10s} {:>10s} {:>10s}"
+    fmt = "{:<12s} {:<8s} {:<6s} {:<6s} {:<6s} {:<6s} {:<10s} {:<10s} {:<10s} {:<10s}"
     print(fmt.format("Datum", "Ticker", "Dir", "Score", "ADX", "RSI",
                       "Entry", "Stop", "TP1", "TP2"))
-    print("-" * 100)
+    print("-" * 86)
     for r in rows:
         print(fmt.format(
             r['scan_date'] or '?',
