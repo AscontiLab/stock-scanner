@@ -1,0 +1,74 @@
+# Stock Scanner — Konfiguration
+# Alle Schwellenwerte fuer CFD-Signale, Scoring und Backtesting.
+# Wird von stock_scanner.py geladen. Fallback auf Defaults wenn Datei fehlt.
+
+# --- CFD Filter ---
+cfd:
+  # ADX-Schwellenwerte
+  adx_min: 30
+  adx_strong: 40            # Bonus-Punkt bei ADX > 40
+
+  # RSI-Zonen (enger als vorher)
+  rsi_long_min: 45
+  rsi_long_max: 62
+  rsi_short_min: 38
+  rsi_short_max: 55
+
+  # ATR-Qualitaetsfilter (% vom Kurs)
+  atr_pct_min: 1.0           # zu enge Stops bei Low-Vol vermeiden
+  atr_pct_max: 8.0           # extrem volatile Werte rausfiltern
+
+  # Trend-Reife: Minimum Tage mit gehaltener MA-Struktur
+  trend_maturity_min_days: 3
+
+  # Volume
+  vol_ratio_min: 1.2         # Mindest-Volumen-Ratio
+  vol_ratio_bonus: 2.0       # Bonus-Punkt bei Vol-Ratio >= 2.0
+
+  # Gap-Filter
+  max_gap_pct: 5.0           # Max erlaubter Gap in letzten 5 Tagen
+
+  # ATR-Multiplikatoren fuer Stop/TP
+  atr_stop_mult: 1.5
+  atr_tp1_mult: 1.5
+  atr_tp2_mult: 4.0
+
+  # Top-N Cap pro Richtung
+  top_n: 10
+
+# --- Gewichtetes Scoring ---
+scoring:
+  weights:
+    adx_di:       2.0        # ADX + DI-Bestaetigung
+    ma_structure:  1.5        # Kern-Trendrichtung (Price > SMA20 > SMA50)
+    ema_stack:     1.5        # Kurzfrist-Momentum (EMA9/21)
+    macd:          1.0        # MACD Histogram Momentum
+    rsi_zone:      1.0        # RSI in Zone
+    volume:        0.5        # Volumen-Bestaetigung
+    no_gap:        0.5        # Kein Gap > 5%
+
+  # Bonus-Punkte (bis +2.0 gesamt)
+  bonus:
+    trend_maturity_days: 5    # +0.5 wenn >= 5 Tage
+    trend_maturity_pts: 0.5
+    vol_ratio_high: 2.0       # +0.5 wenn Vol-Ratio >= 2.0
+    vol_ratio_pts: 0.5
+    adx_strong: 40            # +0.5 wenn ADX > 40
+    adx_strong_pts: 0.5
+    squeeze_fire_pts: 0.5     # +0.5 bei Squeeze-Fire
+
+  # Threshold fuer CFD-Signal
+  threshold: 5.0
+  max_score: 10.0             # 8.0 Basis + 2.0 Bonus
+
+# --- Hauptscan ---
+main_scan:
+  min_score: 4                # |net_score| >= 4 fuer Signal
+  max_gap_pct: 3.0            # Max Gap fuer Hauptsignale
+
+# --- Backtesting ---
+backtesting:
+  db_file: "cfd_backtesting.db"
+  resolve_after_days: 1       # Frueheste Aufloesung
+  resolve_max_days: 10        # Spaeteste Aufloesung
+  enabled: true

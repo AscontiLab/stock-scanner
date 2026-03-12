@@ -21,6 +21,75 @@ import yfinance as yf
 warnings.filterwarnings("ignore")
 
 # ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CONFIG = {
+    "cfd": {
+        "adx_min": 30, "adx_strong": 40,
+        "rsi_long_min": 45, "rsi_long_max": 62,
+        "rsi_short_min": 38, "rsi_short_max": 55,
+        "atr_pct_min": 1.0, "atr_pct_max": 8.0,
+        "trend_maturity_min_days": 3,
+        "vol_ratio_min": 1.2, "vol_ratio_bonus": 2.0,
+        "max_gap_pct": 5.0,
+        "atr_stop_mult": 1.5, "atr_tp1_mult": 1.5, "atr_tp2_mult": 4.0,
+        "top_n": 10,
+    },
+    "scoring": {
+        "weights": {
+            "adx_di": 2.0, "ma_structure": 1.5, "ema_stack": 1.5,
+            "macd": 1.0, "rsi_zone": 1.0, "volume": 0.5, "no_gap": 0.5,
+        },
+        "bonus": {
+            "trend_maturity_days": 5, "trend_maturity_pts": 0.5,
+            "vol_ratio_high": 2.0, "vol_ratio_pts": 0.5,
+            "adx_strong": 40, "adx_strong_pts": 0.5,
+            "squeeze_fire_pts": 0.5,
+        },
+        "threshold": 5.0, "max_score": 10.0,
+    },
+    "main_scan": {"min_score": 4, "max_gap_pct": 3.0},
+    "backtesting": {
+        "db_file": "cfd_backtesting.db", "resolve_after_days": 1,
+        "resolve_max_days": 10, "enabled": True,
+    },
+}
+
+
+def load_config() -> dict:
+    """Lade scanner_config.yaml, Fallback auf Defaults."""
+    config_path = Path(__file__).parent / "scanner_config.yaml"
+    config = _DEFAULT_CONFIG.copy()
+    if config_path.exists():
+        try:
+            import yaml
+            with open(config_path, encoding="utf-8") as f:
+                user_cfg = yaml.safe_load(f) or {}
+            # Deep-merge: nur vorhandene Sections ueberschreiben
+            for section, defaults in _DEFAULT_CONFIG.items():
+                if section in user_cfg:
+                    if isinstance(defaults, dict):
+                        merged = dict(defaults)
+                        for k, v in user_cfg[section].items():
+                            if isinstance(v, dict) and isinstance(merged.get(k), dict):
+                                merged[k] = {**merged[k], **v}
+                            else:
+                                merged[k] = v
+                        config[section] = merged
+                    else:
+                        config[section] = user_cfg[section]
+            print("Config geladen: scanner_config.yaml")
+        except Exception as e:
+            print(f"Config-Fehler, nutze Defaults: {e}")
+    else:
+        print("Keine scanner_config.yaml gefunden, nutze Defaults.")
+    return config
+
+
+CFG = load_config()
+
+# ---------------------------------------------------------------------------
 # Konstanten
 # ---------------------------------------------------------------------------
 
@@ -697,33 +766,119 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
         # --- Größter Tages-Move der letzten 5 Tage (Gap-Filter) ---
         recent_max_gap = float(close.pct_change().tail(5).abs().max()) * 100
 
-        # --- CFD Long Score (7 Kriterien) ---
-        cfd_long = 0
-        if adx_val > 30:                                    cfd_long += 1  # Starker Trend
-        if 45 <= rsi_val <= 65:                             cfd_long += 1  # Momentum-Zone
-        if curr_hist > 0 and curr_hist > prev_hist:         cfd_long += 1  # MACD steigend
-        if current_price > sma20_val > sma50_val:           cfd_long += 1  # MA-Aufwärtstrend
-        if vol_ratio >= 1.2:                                cfd_long += 1  # Volumen bestätigt
-        if recent_max_gap < 5.0:                            cfd_long += 1  # Kein Spike/Gap
-        if ema9_val > ema21_val:                            cfd_long += 1  # EMA-Stack bullish
+        # --- ATR-Qualitaetsfilter ---
+        cfd_atr_ok = CFG["cfd"]["atr_pct_min"] <= atr_pct <= CFG["cfd"]["atr_pct_max"]
 
-        # --- CFD Short Score (7 Kriterien) ---
-        cfd_short = 0
-        if adx_val > 30:                                    cfd_short += 1
-        if 35 <= rsi_val <= 55:                             cfd_short += 1  # Momentum-Zone Short
-        if curr_hist < 0 and curr_hist < prev_hist:         cfd_short += 1  # MACD fallend
-        if current_price < sma20_val < sma50_val:           cfd_short += 1  # MA-Abwärtstrend
-        if vol_ratio >= 1.2:                                cfd_short += 1
-        if recent_max_gap < 5.0:                            cfd_short += 1
-        if ema9_val < ema21_val:                            cfd_short += 1  # EMA-Stack bearish
+        # --- Trend-Reife: Wie viele der letzten N Tage MA-Struktur gehalten ---
+        trend_long_days = 0
+        trend_short_days = 0
+        sma20_arr = sma20.values
+        sma50_arr = sma50.values
+        close_arr = close.values
+        for i in range(max(len(close_arr) - 10, 0), len(close_arr)):
+            if close_arr[i] > sma20_arr[i] > sma50_arr[i]:
+                trend_long_days += 1
+            if close_arr[i] < sma20_arr[i] < sma50_arr[i]:
+                trend_short_days += 1
 
-        # --- ATR-basierte Stop/Target-Level (TP2 = 4×ATR, R/R 2.67:1) ---
-        stop_long   = round(current_price - 1.5 * atr_val, 2)
-        tp1_long    = round(current_price + 1.5 * atr_val, 2)
-        tp2_long    = round(current_price + 4.0 * atr_val, 2)
-        stop_short  = round(current_price + 1.5 * atr_val, 2)
-        tp1_short   = round(current_price - 1.5 * atr_val, 2)
-        tp2_short   = round(current_price - 4.0 * atr_val, 2)
+        cfd_cfg = CFG["cfd"]
+        w = CFG["scoring"]["weights"]
+        bonus = CFG["scoring"]["bonus"]
+
+        # --- CFD Long Score (gewichtet, max 8.0 + 2.0 Bonus) ---
+        cfd_long = 0.0
+        # ADX + DI-Bestaetigung (2.0)
+        if adx_val > cfd_cfg["adx_min"] and plus_di_val > minus_di_val:
+            cfd_long += w["adx_di"]
+        # MA-Struktur (1.5)
+        if current_price > sma20_val > sma50_val:
+            cfd_long += w["ma_structure"]
+        # EMA-Stack (1.5)
+        if ema9_val > ema21_val:
+            cfd_long += w["ema_stack"]
+        # MACD Histogram (1.0)
+        if curr_hist > 0 and curr_hist > prev_hist:
+            cfd_long += w["macd"]
+        # RSI in Zone (1.0)
+        if cfd_cfg["rsi_long_min"] <= rsi_val <= cfd_cfg["rsi_long_max"]:
+            cfd_long += w["rsi_zone"]
+        # Volume (0.5)
+        if vol_ratio >= cfd_cfg["vol_ratio_min"]:
+            cfd_long += w["volume"]
+        # Kein Gap (0.5)
+        if recent_max_gap < cfd_cfg["max_gap_pct"]:
+            cfd_long += w["no_gap"]
+        # Bonus-Punkte (bis +2.0)
+        if trend_long_days >= bonus["trend_maturity_days"]:
+            cfd_long += bonus["trend_maturity_pts"]
+        if vol_ratio >= bonus["vol_ratio_high"]:
+            cfd_long += bonus["vol_ratio_pts"]
+        if adx_val > bonus["adx_strong"]:
+            cfd_long += bonus["adx_strong_pts"]
+        if not sq_on and squeeze_momentum > 0:
+            cfd_long += bonus["squeeze_fire_pts"]
+
+        # --- CFD Short Score (gewichtet, max 8.0 + 2.0 Bonus) ---
+        cfd_short = 0.0
+        if adx_val > cfd_cfg["adx_min"] and minus_di_val > plus_di_val:
+            cfd_short += w["adx_di"]
+        if current_price < sma20_val < sma50_val:
+            cfd_short += w["ma_structure"]
+        if ema9_val < ema21_val:
+            cfd_short += w["ema_stack"]
+        if curr_hist < 0 and curr_hist < prev_hist:
+            cfd_short += w["macd"]
+        if cfd_cfg["rsi_short_min"] <= rsi_val <= cfd_cfg["rsi_short_max"]:
+            cfd_short += w["rsi_zone"]
+        if vol_ratio >= cfd_cfg["vol_ratio_min"]:
+            cfd_short += w["volume"]
+        if recent_max_gap < cfd_cfg["max_gap_pct"]:
+            cfd_short += w["no_gap"]
+        if trend_short_days >= bonus["trend_maturity_days"]:
+            cfd_short += bonus["trend_maturity_pts"]
+        if vol_ratio >= bonus["vol_ratio_high"]:
+            cfd_short += bonus["vol_ratio_pts"]
+        if adx_val > bonus["adx_strong"]:
+            cfd_short += bonus["adx_strong_pts"]
+        if not sq_on and squeeze_momentum < 0:
+            cfd_short += bonus["squeeze_fire_pts"]
+
+        # --- ATR-Gate + Trend-Reife-Filter ---
+        if not cfd_atr_ok:
+            cfd_long = 0.0
+            cfd_short = 0.0
+        else:
+            if trend_long_days < cfd_cfg["trend_maturity_min_days"]:
+                cfd_long = 0.0
+            if trend_short_days < cfd_cfg["trend_maturity_min_days"]:
+                cfd_short = 0.0
+
+        # --- Exklusive Richtung: nur staerkere Richtung behalten ---
+        if cfd_long >= CFG["scoring"]["threshold"] and cfd_short >= CFG["scoring"]["threshold"]:
+            if cfd_long > cfd_short:
+                cfd_short = 0.0
+            elif cfd_short > cfd_long:
+                cfd_long = 0.0
+            else:
+                # Gleichstand: DI entscheidet
+                if plus_di_val >= minus_di_val:
+                    cfd_short = 0.0
+                else:
+                    cfd_long = 0.0
+
+        cfd_long = round(cfd_long, 1)
+        cfd_short = round(cfd_short, 1)
+
+        # --- ATR-basierte Stop/Target-Level ---
+        atr_stop = cfd_cfg["atr_stop_mult"]
+        atr_tp1 = cfd_cfg["atr_tp1_mult"]
+        atr_tp2 = cfd_cfg["atr_tp2_mult"]
+        stop_long   = round(current_price - atr_stop * atr_val, 2)
+        tp1_long    = round(current_price + atr_tp1 * atr_val, 2)
+        tp2_long    = round(current_price + atr_tp2 * atr_val, 2)
+        stop_short  = round(current_price + atr_stop * atr_val, 2)
+        tp1_short   = round(current_price - atr_tp1 * atr_val, 2)
+        tp2_short   = round(current_price - atr_tp2 * atr_val, 2)
 
         # --- RVOL Label ---
         rvol_label = "🔥 Hoch" if vol_ratio > 2.0 else "↑ Erhöht" if vol_ratio > 1.5 else "— Normal"
@@ -753,11 +908,16 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
             "atr": round(atr_val, 3),
             "atr_pct": atr_pct,
             "adx": round(adx_val, 1),
+            "plus_di": round(plus_di_val, 1),
+            "minus_di": round(minus_di_val, 1),
             "vol_ratio": round(vol_ratio, 2),
             "rvol_label": rvol_label,
             "recent_max_gap": round(recent_max_gap, 1),
             "cfd_long_score": cfd_long,
             "cfd_short_score": cfd_short,
+            "cfd_quality_score": max(cfd_long, cfd_short),
+            "trend_long_days": trend_long_days,
+            "trend_short_days": trend_short_days,
             "stop_long": stop_long,
             "tp1_long": tp1_long,
             "tp2_long": tp2_long,
@@ -937,7 +1097,9 @@ def build_cfd_row(row: dict, direction: str) -> str:
     reward = abs(tp2 - price)
     rr     = reward / risk if risk > 0 else 0
 
-    score_color = "#1e8449" if score >= 5 else "#d68910" if score >= 4 else "#7f8c8d"
+    max_s = CFG["scoring"]["max_score"]
+    score_color = "#1e8449" if score >= 7.0 else "#27ae60" if score >= 6.0 else "#d68910" if score >= 5.0 else "#7f8c8d"
+    score_display = f"{score:.1f}/{max_s:.0f}"
     gap_html = (
         f'<span style="color:#e74c3c;font-weight:bold">{row["recent_max_gap"]}% ⚠</span>'
         if row["recent_max_gap"] >= 5
@@ -945,13 +1107,14 @@ def build_cfd_row(row: dict, direction: str) -> str:
         if row["recent_max_gap"] >= 3
         else f'{row["recent_max_gap"]}%'
     )
+    di_info = f'+DI={row.get("plus_di", "?")}/−DI={row.get("minus_di", "?")}'
     cells = "".join([
         f'<td style="font-weight:bold">{row["ticker"]}</td>',
         f'<td style="font-size:0.85em">{row["market"]}</td>',
-        f'<td style="text-align:center;font-weight:bold;color:{score_color}">{score}/7</td>',
+        f'<td style="text-align:center;font-weight:bold;color:{score_color}">{score_display}</td>',
         f'<td style="text-align:center"><span style="background:{dir_color};color:white;'
         f'padding:2px 8px;border-radius:4px;font-size:0.85em">{dir_label}</span></td>',
-        f'<td style="text-align:center">{row["adx"]}</td>',
+        f'<td style="text-align:center" title="{di_info}">{row["adx"]}</td>',
         f'<td style="text-align:center">{row["rsi"]}</td>',
         f'<td style="text-align:right">{price}</td>',
         f'<td style="text-align:right;color:#e74c3c">{stop}</td>',
@@ -980,8 +1143,9 @@ def build_cfd_table(cfd_long: list, cfd_short: list) -> str:
   <span style="color:#e74c3c">Short: {total_s}</span>
 </h2>
 <p style="color:#7f8c8d;font-size:0.83em">
-  Score &ge; 4/7 &nbsp;|&nbsp; Kriterien: ADX&gt;30 · RSI-Zone · MACD steigend · MA-Struktur · Volumen · kein Gap &gt;5% · EMA-Stack
-  &nbsp;|&nbsp; Stop = 1.5×ATR &nbsp;|&nbsp; TP2 = 4×ATR (2.67:1 R/R)
+  Gewichteter Score &ge; {CFG["scoring"]["threshold"]:.0f}/{CFG["scoring"]["max_score"]:.0f} &nbsp;|&nbsp;
+  ADX+DI (2.0) · MA-Struktur (1.5) · EMA-Stack (1.5) · MACD (1.0) · RSI-Zone (1.0) · Vol (0.5) · Gap (0.5) + Bonus (2.0)
+  &nbsp;|&nbsp; Stop = {CFG["cfd"]["atr_stop_mult"]}×ATR &nbsp;|&nbsp; TP2 = {CFG["cfd"]["atr_tp2_mult"]}×ATR
 </p>
 <div style="overflow-x:auto">
 <table style="width:100%;border-collapse:collapse;font-size:0.88em">
@@ -1181,27 +1345,29 @@ def main():
     for r in sell_rows[:5]:
         print(f"  {r['ticker']:10s}  Score={r['net_score']:+d}  RSI={r['rsi']}  Kurs={r['price']}  {r['pct_change']:+.2f}%")
 
-    # --- CFD Setups filtern ---
+    # --- CFD Setups filtern (gewichteter Score >= Threshold, Top-N Cap) ---
+    cfd_threshold = CFG["scoring"]["threshold"]
+    cfd_top_n = CFG["cfd"]["top_n"]
     cfd_long_rows = sorted(
-        [r for r in results if r["cfd_long_score"] >= 4],
+        [r for r in results if r["cfd_long_score"] >= cfd_threshold],
         key=lambda r: r["cfd_long_score"], reverse=True,
-    )
+    )[:cfd_top_n]
     cfd_short_rows = sorted(
-        [r for r in results if r["cfd_short_score"] >= 4],
+        [r for r in results if r["cfd_short_score"] >= cfd_threshold],
         key=lambda r: r["cfd_short_score"], reverse=True,
-    )
-    print(f"\nCFD Long Setups:   {len(cfd_long_rows)}")
+    )[:cfd_top_n]
+    print(f"\nCFD Long Setups:   {len(cfd_long_rows)} (Threshold >= {cfd_threshold}, Top {cfd_top_n})")
     print(f"CFD Short Setups:  {len(cfd_short_rows)}")
 
     print("\nTOP 5 CFD LONG:")
     for r in cfd_long_rows[:5]:
-        print(f"  {r['ticker']:10s}  CFD={r['cfd_long_score']}/7  ADX={r['adx']}  RSI={r['rsi']}  "
-              f"Stop={r['stop_long']}  TP2={r['tp2_long']}")
+        print(f"  {r['ticker']:10s}  Score={r['cfd_long_score']:.1f}/10  ADX={r['adx']}  "
+              f"+DI={r.get('plus_di','?')}  RSI={r['rsi']}  Stop={r['stop_long']}  TP2={r['tp2_long']}")
 
     print("\nTOP 5 CFD SHORT:")
     for r in cfd_short_rows[:5]:
-        print(f"  {r['ticker']:10s}  CFD={r['cfd_short_score']}/7  ADX={r['adx']}  RSI={r['rsi']}  "
-              f"Stop={r['stop_short']}  TP2={r['tp2_short']}")
+        print(f"  {r['ticker']:10s}  Score={r['cfd_short_score']:.1f}/10  ADX={r['adx']}  "
+              f"-DI={r.get('minus_di','?')}  RSI={r['rsi']}  Stop={r['stop_short']}  TP2={r['tp2_short']}")
 
     # --- Output-Verzeichnis mit Datum ---
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -1233,6 +1399,30 @@ def main():
         pd.DataFrame(cfd_all).to_csv(cfd_csv, index=False, encoding="utf-8-sig")
         pd.DataFrame(cfd_all).to_csv("cfd_setups.csv", index=False, encoding="utf-8-sig")
         print(f"CFD-CSV:      {cfd_csv.resolve()}")
+
+    # --- CFD Backtesting ---
+    if CFG["backtesting"]["enabled"] and not args.dry_run:
+        try:
+            from cfd_backtesting import init_db, log_scan_run, log_cfd_signal, resolve_signals
+            init_db()
+            run_id = log_scan_run(
+                scan_date=date_str,
+                fear_greed=fear_greed.get("value", 50),
+                ticker_count=total,
+                long_signals=len(cfd_long_rows),
+                short_signals=len(cfd_short_rows),
+            )
+            for r in cfd_long_rows:
+                log_cfd_signal(run_id, r, "long")
+            for r in cfd_short_rows:
+                log_cfd_signal(run_id, r, "short")
+            print(f"\nBacktesting: {len(cfd_long_rows) + len(cfd_short_rows)} Signale geloggt (Run #{run_id})")
+            resolve_signals(
+                min_days=CFG["backtesting"]["resolve_after_days"],
+                max_days=CFG["backtesting"]["resolve_max_days"],
+            )
+        except Exception as e:
+            print(f"Backtesting-Fehler (nicht kritisch): {e}")
 
     # --- Dashboard Push ---
     try:

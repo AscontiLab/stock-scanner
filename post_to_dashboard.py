@@ -43,8 +43,16 @@ def post_to_dashboard(output_dir: str, fear_greed: dict) -> None:
         key=lambda s: to_float(s.get("net_score", 0)),
     )[:10]
 
-    cfd_long = [c for c in cfds if c.get("cfd_direction") == "long"][:8]
-    cfd_short = [c for c in cfds if c.get("cfd_direction") == "short"][:8]
+    cfd_long = [c for c in cfds if c.get("cfd_direction") == "long"][:10]
+    cfd_short = [c for c in cfds if c.get("cfd_direction") == "short"][:10]
+
+    # cfd_quality_score als Float sicherstellen
+    for c in cfd_long + cfd_short:
+        if "cfd_quality_score" not in c:
+            # Backward-Compat: altes Format (int Score /7)
+            direction = c.get("cfd_direction", "long")
+            score_key = f"cfd_{direction}_score"
+            c["cfd_quality_score"] = to_float(c.get(score_key, 0))
 
     payload = {
         "date": date_str,
@@ -54,6 +62,7 @@ def post_to_dashboard(output_dir: str, fear_greed: dict) -> None:
         "sell_signals": sell_signals,
         "cfd_long": cfd_long,
         "cfd_short": cfd_short,
+        "score_format": "weighted",  # Signal an Dashboard: neues Float-Format
     }
 
     try:
