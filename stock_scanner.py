@@ -1385,8 +1385,9 @@ def main():
     csv_path = output_dir / "trading_signals.csv"
     all_signal_rows = buy_rows + sell_rows
     if all_signal_rows:
-        pd.DataFrame(all_signal_rows).to_csv(csv_path, index=False, encoding="utf-8-sig")
-        pd.DataFrame(all_signal_rows).to_csv("trading_signals.csv", index=False, encoding="utf-8-sig")
+        df_signals = pd.DataFrame(all_signal_rows)
+        df_signals.to_csv(csv_path, index=False, encoding="utf-8-sig")
+        df_signals.to_csv("trading_signals.csv", index=False, encoding="utf-8-sig")
         print(f"CSV-Export:   {csv_path.resolve()}")
 
     # --- CFD CSV ---
@@ -1396,8 +1397,9 @@ def main():
     )
     if cfd_all:
         cfd_csv = output_dir / "cfd_setups.csv"
-        pd.DataFrame(cfd_all).to_csv(cfd_csv, index=False, encoding="utf-8-sig")
-        pd.DataFrame(cfd_all).to_csv("cfd_setups.csv", index=False, encoding="utf-8-sig")
+        df_cfd = pd.DataFrame(cfd_all)
+        df_cfd.to_csv(cfd_csv, index=False, encoding="utf-8-sig")
+        df_cfd.to_csv("cfd_setups.csv", index=False, encoding="utf-8-sig")
         print(f"CFD-CSV:      {cfd_csv.resolve()}")
 
     # --- CFD Backtesting ---
