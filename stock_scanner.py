@@ -1079,7 +1079,7 @@ def build_summary(buy_rows: list, sell_rows: list, scan_time: str) -> str:
 CFD_HEADERS = [
     "Ticker", "Markt", "Score", "Richtung", "ADX", "RSI",
     "Einstieg", "Stop (1.5×ATR)", "TP1 (1:1)", "TP2 (2.67:1)",
-    "R/R", "ATR%", "Gap 5T", "RVOL",
+    "R/R", "ATR%", "Gap 5T", "RVOL", "",
 ]
 
 
@@ -1108,6 +1108,7 @@ def build_cfd_row(row: dict, direction: str) -> str:
         else f'{row["recent_max_gap"]}%'
     )
     di_info = f'+DI={row.get("plus_di", "?")}/−DI={row.get("minus_di", "?")}'
+    ticker_esc = row["ticker"].replace("'", "\\'")
     cells = "".join([
         f'<td style="font-weight:bold">{row["ticker"]}</td>',
         f'<td style="font-size:0.85em">{row["market"]}</td>',
@@ -1124,6 +1125,9 @@ def build_cfd_row(row: dict, direction: str) -> str:
         f'<td style="text-align:center">{row["atr_pct"]}%</td>',
         f'<td style="text-align:center">{gap_html}</td>',
         f'<td style="text-align:center">{row.get("rvol_label", "—")}</td>',
+        f'<td style="text-align:center">'
+        f'<button onclick="addPosition(\'{ticker_esc}\', \'{direction}\')" '
+        f'class="btn-add" title="Position übernehmen">+</button></td>',
     ])
     return f'<tr style="background:{bg}">{cells}</tr>'
 
@@ -1176,6 +1180,97 @@ def _fear_greed_badge(fg: dict) -> str:
     )
 
 
+def build_portfolio_section(reports: list) -> str:
+    """Erstellt die HTML-Sektion 'Meine Positionen' mit Status und Empfehlungen."""
+    if not reports:
+        return ""
+
+    rows_html = []
+    for r in reports:
+        if "error" in r:
+            rows_html.append(
+                f'<tr><td style="font-weight:bold">{r["ticker"]}</td>'
+                f'<td colspan="10" style="color:#e74c3c">Fehler: {r["error"]}</td></tr>'
+            )
+            continue
+
+        # Farben
+        dir_color = "#27ae60" if r["direction"] == "long" else "#e74c3c"
+        dir_label = r["direction"].upper()
+        pnl_color = "#27ae60" if r["pnl_pct"] >= 0 else "#e74c3c"
+        pnl_sign = "+" if r["pnl_pct"] >= 0 else ""
+        rec_color = r.get("rec_color", "#7f8c8d")
+
+        # Warnungen als Tooltip
+        warn_list = r.get("warnings", [])
+        warn_tooltip = " | ".join(warn_list) if warn_list else "Keine Warnungen"
+        warn_count = len(warn_list)
+        warn_badge = (
+            f'<span style="color:#27ae60" title="{warn_tooltip}">0</span>'
+            if warn_count == 0
+            else f'<span style="color:#e67e22" title="{warn_tooltip}">{warn_count}</span>'
+            if warn_count <= 2
+            else f'<span style="color:#e74c3c;font-weight:bold" title="{warn_tooltip}">{warn_count}</span>'
+        )
+
+        # TP1-Hit Badge
+        tp1_badge = ' <span style="color:#27ae60;font-size:0.8em">TP1</span>' if r.get("tp1_hit") else ""
+
+        # Indikatoren
+        ind = r.get("indicators", {})
+        ind_html = ""
+        if ind:
+            ind_html = (
+                f'<span style="font-size:0.75em;color:#7f8c8d">'
+                f'ADX {ind.get("adx", "?")} | RSI {ind.get("rsi", "?")} | '
+                f'MACD {ind.get("macd_hist", "?")}</span>'
+            )
+
+        cells = "".join([
+            f'<td style="font-weight:bold">{r["ticker"]}{tp1_badge}</td>',
+            f'<td style="text-align:center"><span style="background:{dir_color};color:white;'
+            f'padding:2px 8px;border-radius:4px;font-size:0.85em">{dir_label}</span></td>',
+            f'<td style="text-align:right">{r["entry_price"]:.2f}</td>',
+            f'<td style="text-align:right;font-weight:bold">{r["current_price"]:.2f}</td>',
+            f'<td style="text-align:right;color:{pnl_color};font-weight:bold">{pnl_sign}{r["pnl_pct"]:.1f}%</td>',
+            f'<td style="text-align:center">{r["days_held"]}d</td>',
+            f'<td style="text-align:right;color:#e74c3c">{r["stop_current"]:.2f}</td>',
+            f'<td style="text-align:right;color:#27ae60">{r["tp1"]:.2f}</td>',
+            f'<td style="text-align:right;color:#27ae60">{r["tp2"]:.2f}</td>',
+            f'<td style="text-align:center">{warn_badge}</td>',
+            f'<td style="font-weight:bold;color:{rec_color}">{r["recommendation"]}</td>',
+        ])
+        rows_html.append(f'<tr>{cells}</tr>')
+
+        # Warnungen als Detailzeile
+        if warn_list:
+            warn_details = " &bull; ".join(warn_list)
+            rows_html.append(
+                f'<tr style="background:#fef9e7"><td></td>'
+                f'<td colspan="10" style="font-size:0.8em;color:#7f8c8d;padding:2px 10px">'
+                f'{warn_details}</td></tr>'
+            )
+
+    headers = ["Ticker", "Richtung", "Entry", "Aktuell", "P&L", "Tage",
+               "Stop", "TP1", "TP2", "Warn.", "Empfehlung"]
+    header_cells = "".join(
+        f'<th style="padding:8px 12px;text-align:left">{h}</th>' for h in headers
+    )
+
+    return f"""
+<h2 style="margin-top:2rem;color:#2c3e50">
+  Meine CFD-Positionen &nbsp;
+  <span style="font-size:0.7em;color:#7f8c8d">({len(reports)} aktiv)</span>
+</h2>
+<div style="overflow-x:auto">
+<table style="width:100%;border-collapse:collapse;font-size:0.88em">
+  <thead><tr style="background:#1a252f;color:white">{header_cells}</tr></thead>
+  <tbody>{"".join(rows_html)}</tbody>
+</table>
+</div>
+"""
+
+
 def generate_html(
     buy_rows: list,
     sell_rows: list,
@@ -1183,12 +1278,14 @@ def generate_html(
     cfd_long_rows: list | None = None,
     cfd_short_rows: list | None = None,
     fear_greed: dict | None = None,
+    position_reports: list | None = None,
 ) -> str:
     fg_badge = _fear_greed_badge(fear_greed or {"value": 50, "label": "Neutral"})
     summary   = build_summary(buy_rows, sell_rows, scan_time)
     buy_table = build_table(buy_rows, "buy", "KAUFSIGNALE")
     sell_table = build_table(sell_rows, "sell", "VERKAUFSIGNALE")
     cfd_section = build_cfd_table(cfd_long_rows or [], cfd_short_rows or [])
+    portfolio_section = build_portfolio_section(position_reports or [])
     return f"""<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -1199,11 +1296,40 @@ def generate_html(
   h1 {{ color: #2c3e50 }}
   table td, table th {{ border: 1px solid #ddd; padding: 6px 10px }}
   table tr:hover {{ filter: brightness(0.95) }}
+  .btn-add {{
+    background: #27ae60; color: white; border: none; border-radius: 4px;
+    padding: 4px 10px; cursor: pointer; font-weight: bold; font-size: 1em;
+  }}
+  .btn-add:hover {{ background: #1e8449 }}
+  .btn-add:disabled {{ background: #95a5a6; cursor: default }}
 </style>
+<script>
+function addPosition(ticker, direction) {{
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '...';
+  fetch('https://agents.umzwei.de/webhook/cfd-add-position', {{
+    method: 'POST',
+    headers: {{'Content-Type': 'application/json'}},
+    body: JSON.stringify({{ticker: ticker, direction: direction}})
+  }})
+  .then(function(r) {{ return r.json() }})
+  .then(function(d) {{
+    btn.textContent = 'OK';
+    btn.style.background = '#1e8449';
+  }})
+  .catch(function(e) {{
+    btn.textContent = '!';
+    btn.style.background = '#e74c3c';
+    btn.disabled = false;
+  }});
+}}
+</script>
 </head>
 <body>
 <h1>📊 Technical Analysis Stock Scanner</h1>
 <p style="color:#7f8c8d">Datum: {scan_time} &nbsp;|&nbsp; Signale mit |Score| &ge; 4 &nbsp;|&nbsp; {fg_badge}</p>
+{portfolio_section}
 {summary}
 {buy_table}
 {sell_table}
@@ -1233,11 +1359,67 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Keine externen API-Calls; erzeugt leeren Report für Smoke-Check.",
     )
+    # CFD-Portfolio-Befehle
+    parser.add_argument(
+        "--add-position",
+        nargs=2,
+        metavar=("TICKER", "DIRECTION"),
+        help="CFD-Position hinzufügen (z.B. --add-position CVX long)",
+    )
+    parser.add_argument(
+        "--close-position",
+        metavar="TICKER",
+        help="CFD-Position schliessen (z.B. --close-position CVX)",
+    )
+    parser.add_argument(
+        "--positions",
+        action="store_true",
+        help="Alle aktiven CFD-Positionen anzeigen.",
+    )
+    parser.add_argument(
+        "--check-positions",
+        action="store_true",
+        help="Alle Positionen prüfen und Empfehlungen ausgeben.",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+
+    # ── Portfolio-Befehle (Early Exit) ──────────────────────────────────────
+    from cfd_portfolio import (
+        add_position, close_position, print_positions, check_positions, list_positions
+    )
+
+    if args.add_position:
+        ticker, direction = args.add_position
+        add_position(ticker, direction)
+        return
+
+    if args.close_position:
+        close_position(args.close_position)
+        return
+
+    if args.positions:
+        print_positions()
+        return
+
+    if args.check_positions:
+        reports = check_positions()
+        for r in reports:
+            if "error" in r:
+                print(f"\n  {r['ticker']}: FEHLER — {r['error']}")
+                continue
+            pnl_sign = "+" if r["pnl_pct"] >= 0 else ""
+            print(f"\n  {r['ticker']} {r['direction'].upper()} | "
+                  f"{r['current_price']:.2f} ({pnl_sign}{r['pnl_pct']:.1f}%) | "
+                  f"Tag {r['days_held']}")
+            print(f"    {r['recommendation']}")
+            for w in r.get("warnings", []):
+                print(f"      - {w}")
+        return
+
     start_time = time.time()
     scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n{'='*60}")
@@ -1369,6 +1551,20 @@ def main():
         print(f"  {r['ticker']:10s}  Score={r['cfd_short_score']:.1f}/10  ADX={r['adx']}  "
               f"-DI={r.get('minus_di','?')}  RSI={r['rsi']}  Stop={r['stop_short']}  TP2={r['tp2_short']}")
 
+    # --- Portfolio-Check (aktive CFD-Positionen) ---
+    position_reports = []
+    positions = list_positions()
+    if positions:
+        print(f"\nPrüfe {len(positions)} aktive CFD-Position(en) …")
+        position_reports = check_positions(positions)
+        for r in position_reports:
+            if "error" in r:
+                print(f"  {r['ticker']}: FEHLER")
+            else:
+                pnl_sign = "+" if r["pnl_pct"] >= 0 else ""
+                print(f"  {r['ticker']} {r['direction'].upper()} | "
+                      f"{pnl_sign}{r['pnl_pct']:.1f}% | {r['recommendation']}")
+
     # --- Output-Verzeichnis mit Datum ---
     date_str = datetime.now().strftime("%Y-%m-%d")
     output_dir = Path("output") / date_str
@@ -1376,7 +1572,10 @@ def main():
 
     # --- Write HTML ---
     html_path = output_dir / "trading_signals.html"
-    html_content = generate_html(buy_rows, sell_rows, scan_time, cfd_long_rows, cfd_short_rows, fear_greed)
+    html_content = generate_html(
+        buy_rows, sell_rows, scan_time, cfd_long_rows, cfd_short_rows,
+        fear_greed, position_reports,
+    )
     html_path.write_text(html_content, encoding="utf-8")
     Path("trading_signals.html").write_text(html_content, encoding="utf-8")
     print(f"\nHTML-Bericht: {html_path.resolve()}")

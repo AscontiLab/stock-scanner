@@ -1,0 +1,22 @@
+{
+  "positions": [
+    {
+      "id": "CVX_long_2026-03-13",
+      "ticker": "CVX",
+      "direction": "long",
+      "entry_price": 196.97,
+      "entry_date": "2026-03-13",
+      "stop_original": 190.73,
+      "stop_current": 190.73,
+      "tp1": 203.21,
+      "tp2": 213.61,
+      "tp1_hit": false,
+      "tp1_hit_date": null,
+      "atr_at_entry": 4.161,
+      "score_at_entry": 9.0,
+      "market": "S&P 500",
+      "highest_since_entry": 196.97,
+      "lowest_since_entry": 196.97
+    }
+  ]
+}
