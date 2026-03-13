@@ -5,6 +5,7 @@ Scans NASDAQ 100, S&P 500 and DAX 40 for short-term trading signals (1-5 day hor
 """
 
 import argparse
+import copy
 import logging
 import re
 import sys
@@ -60,7 +61,7 @@ _DEFAULT_CONFIG = {
 def load_config() -> dict:
     """Lade scanner_config.yaml, Fallback auf Defaults."""
     config_path = Path(__file__).parent / "scanner_config.yaml"
-    config = _DEFAULT_CONFIG.copy()
+    config = copy.deepcopy(_DEFAULT_CONFIG)
     if config_path.exists():
         try:
             import yaml
@@ -119,10 +120,10 @@ NASDAQ100_FALLBACK = [
     "ADP", "CTAS", "ORLY", "PCAR", "MNST", "CHTR", "NXPI", "MELI", "FTNT",
     "WDAY", "CPRT", "PAYX", "EXC", "SIRI", "ODFL", "VRSK", "BIIB", "DLTR",
     "DXCM", "ANSS", "FANG", "FAST", "IDXX", "ILMN", "KDP", "KHC", "LCID",
-    "LULU", "MAR", "MCHP", "MRNA", "MTCH", "OKTA", "ROST", "SGEN", "TTWO",
+    "LULU", "MAR", "MCHP", "MRNA", "MTCH", "OKTA", "ROST", "TTWO",
     "VRSN", "VRTX", "XEL", "ZS", "ZM", "TEAM", "CRWD", "DDOG", "SNOW",
     "ABNB", "EBAY", "WBA", "CEG", "ON", "GFS", "ENPH", "ALGN", "GEHC",
-    "FSLR", "SWKS", "BMRN", "SPLK", "AKAM", "CTSH",
+    "FSLR", "SWKS", "BMRN", "AKAM", "CTSH",
 ]
 
 SP500_FALLBACK = [
@@ -132,9 +133,9 @@ SP500_FALLBACK = [
     "T", "VZ", "CMCSA", "MS", "GS", "BLK", "SCHW", "C", "WFC", "AXP",
     "LOW", "SPGI", "DE", "NKE", "AMAT", "MMM", "UPS", "LMT", "MO", "USB",
     "DUK", "SO", "AEP", "SRE", "D", "PCG", "EXC", "ETR", "AWK", "ES",
-    "BMY", "AMGN", "GILD", "REGN", "VRTX", "BIIB", "ALXN", "MRNA", "ILMN",
+    "BMY", "AMGN", "GILD", "REGN", "VRTX", "BIIB", "MRNA", "ILMN",
     "ZTS", "IDXX", "A", "BDX", "BAX", "EW", "ISRG", "IQV", "CI", "HUM",
-    "CNC", "MOH", "DVA", "HCA", "UHS", "THC", "ANTM", "CVS", "WBA", "CAH",
+    "CNC", "MOH", "DVA", "HCA", "UHS", "THC", "ELV", "CVS", "WBA", "CAH",
     "MCK", "ABC", "AmerisourceBergen", "PFE", "MDT", "SYK", "BSX", "ZBH",
     "DXCM", "HAL", "SLB", "BKR", "MPC", "VLO", "PSX", "COP", "PXD", "EOG",
     "DVN", "HES", "MRO", "APA", "FANG", "OXY", "WMB", "OKE", "KMI", "ET",
@@ -1567,7 +1568,7 @@ def main():
 
     # --- Output-Verzeichnis mit Datum ---
     date_str = datetime.now().strftime("%Y-%m-%d")
-    output_dir = Path("output") / date_str
+    output_dir = Path(__file__).parent / "output" / date_str
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Write HTML ---

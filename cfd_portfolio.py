@@ -21,6 +21,12 @@ import yfinance as yf
 
 PORTFOLIO_PATH = Path(__file__).parent / "cfd_portfolio.json"
 
+# ATR-Multiplikatoren (zentrale Konstanten statt Hardcoding)
+ATR_STOP_MULT = 1.5   # Stop-Loss Abstand in ATR
+ATR_TP1_MULT = 1.5    # Take-Profit 1 Abstand in ATR
+ATR_TP2_MULT = 4.0    # Take-Profit 2 Abstand in ATR
+ATR_TRAIL_MULT = 1.5  # Trailing-Stop Abstand in ATR (nach TP1-Hit)
+
 _EMPTY_PORTFOLIO = {"positions": []}
 
 
@@ -154,13 +160,13 @@ def _lookup_levels(ticker: str, direction: str) -> tuple:
     atr_val = float(tr.rolling(14).mean().iloc[-1])
 
     if direction == "long":
-        stop = round(current - 1.5 * atr_val, 2)
-        tp1 = round(current + 1.5 * atr_val, 2)
-        tp2 = round(current + 4.0 * atr_val, 2)
+        stop = round(current - ATR_STOP_MULT * atr_val, 2)
+        tp1 = round(current + ATR_TP1_MULT * atr_val, 2)
+        tp2 = round(current + ATR_TP2_MULT * atr_val, 2)
     else:
-        stop = round(current + 1.5 * atr_val, 2)
-        tp1 = round(current - 1.5 * atr_val, 2)
-        tp2 = round(current - 4.0 * atr_val, 2)
+        stop = round(current + ATR_STOP_MULT * atr_val, 2)
+        tp1 = round(current - ATR_TP1_MULT * atr_val, 2)
+        tp2 = round(current - ATR_TP2_MULT * atr_val, 2)
 
     return current, stop, tp1, tp2, atr_val, None, ""
 
@@ -271,9 +277,9 @@ def _check_single_position(pos: dict) -> dict:
             entry_idx = i
             break
     if entry_idx is not None:
-        since_entry = close.iloc[entry_idx:]
-        highest = float(since_entry.max())
-        lowest = float(since_entry.min())
+        # Hoechstkurs aus High-Spalte, Tiefstkurs aus Low-Spalte
+        highest = float(high.iloc[entry_idx:].max())
+        lowest = float(low.iloc[entry_idx:].min())
         pos["highest_since_entry"] = round(max(highest, pos.get("highest_since_entry", highest)), 2)
         pos["lowest_since_entry"] = round(min(lowest, pos.get("lowest_since_entry", lowest)), 2)
 
@@ -294,16 +300,16 @@ def _check_single_position(pos: dict) -> dict:
         pos["stop_current"] = entry  # Break-Even
         stop_current = entry
 
-    # Trailing Stop (nach TP1-Hit): 1.5x ATR unter Höchstkurs (Long)
+    # Trailing Stop (nach TP1-Hit): ATR_TRAIL_MULT x ATR unter Hoechstkurs (Long)
     if pos["tp1_hit"] and pos.get("atr_at_entry"):
         atr = pos["atr_at_entry"]
         if direction == "long":
-            trail_stop = round(pos["highest_since_entry"] - 1.5 * atr, 2)
+            trail_stop = round(pos["highest_since_entry"] - ATR_TRAIL_MULT * atr, 2)
             if trail_stop > stop_current:
                 pos["stop_current"] = trail_stop
                 stop_current = trail_stop
         else:
-            trail_stop = round(pos["lowest_since_entry"] + 1.5 * atr, 2)
+            trail_stop = round(pos["lowest_since_entry"] + ATR_TRAIL_MULT * atr, 2)
             if trail_stop < stop_current:
                 pos["stop_current"] = trail_stop
                 stop_current = trail_stop
@@ -340,11 +346,13 @@ def _check_single_position(pos: dict) -> dict:
     ema9_val = float(ema9.iloc[-1])
     ema21_val = float(ema21.iloc[-1])
 
-    # RSI
+    # RSI (EMA-Smoothing, konsistent mit stock_scanner.py)
     delta = close.diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
-    loss = (-delta.clip(upper=0)).rolling(14).mean()
-    rs = gain / loss
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(com=13, min_periods=14).mean()
+    avg_loss = loss.ewm(com=13, min_periods=14).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
     rsi = 100 - 100 / (1 + rs)
     rsi_val = float(rsi.iloc[-1])
 
