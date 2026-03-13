@@ -18,16 +18,16 @@ Taeglicher Aktien-Scanner fuer kurzfristige Trading-Signale (1-5 Tage Horizont) 
                     │  6. HTML/CSV erzeugen │
                     └──────┬──────┬────────┘
                            │      │
-              ┌────────────┘      └────────────┐
-              v                                v
-     ┌─────────────────┐            ┌────────────────────┐
-     │  send_report.py │            │ post_to_dashboard.py│
-     │  (Gmail SMTP)   │            │ (n8n Webhook)       │
-     └─────────────────┘            └────────────────────┘
-              │                                │
-              v                                v
-        E-Mail-Report                 n8n Stock Dashboard
-                                  (agents.umzwei.de)
+              └──────────────────────────────────┐
+                                                 v
+                                      ┌────────────────────┐
+                                      │ post_to_dashboard.py│
+                                      │ (n8n Webhook)       │
+                                      └────────────────────┘
+                                                 │
+                                                 v
+                                        n8n Stock Dashboard
+                                     (agents.umzwei.de)
 
      ┌──────────────────┐
      │ cfd_backtesting.py│
@@ -130,7 +130,7 @@ stock-scanner/
 ├── scanner_config.yaml     # Konfiguration: alle Schwellenwerte und Gewichte
 ├── cfd_backtesting.py      # CFD-Backtesting: SQLite-Tracking + CLI
 ├── post_to_dashboard.py    # n8n Dashboard-Push (Webhook)
-├── send_report.py          # E-Mail-Versand (Gmail SMTP)
+├── send_report.py          # E-Mail-Versand (Gmail SMTP, deaktiviert)
 ├── run_scanner.sh          # Cron-Wrapper-Script
 ├── .gitignore
 ├── README.md
@@ -158,18 +158,6 @@ pip install yfinance pandas numpy pyyaml tqdm requests
 ```
 
 (`tqdm` ist optional — ohne wird kein Fortschrittsbalken angezeigt.)
-
-### Gmail-Credentials
-
-Fuer den E-Mail-Versand: Datei `~/.stock_scanner_credentials` anlegen (chmod 600):
-
-```
-GMAIL_USER=maikstephan.lab@gmail.com
-GMAIL_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
-GMAIL_RECIPIENT=empfaenger@example.com
-```
-
-Das App-Passwort wird in den Google-Account-Einstellungen unter "Sicherheit > App-Passwoerter" erstellt.
 
 ---
 
@@ -199,16 +187,8 @@ Der Scanner laeuft automatisch Mo-Fr um 22:30 UTC (23:30 MEZ, nach US-Boersensch
 
 `run_scanner.sh` uebernimmt:
 1. Scanner ausfuehren mit Logging
-2. E-Mail-Report senden (bei Erfolg)
+2. Dashboard-Push an n8n
 3. Alte Logs (> 30 Tage) aufraumen
-
-### E-Mail manuell senden
-
-```bash
-python3 send_report.py
-```
-
-Sucht automatisch den HTML-Report im aktuellen Tages-Ordner (`output/YYYY-MM-DD/`) und haengt die CSV als Anhang an.
 
 ---
 
@@ -414,8 +394,7 @@ Alle Schwellenwerte in `scanner_config.yaml`, damit Anpassungen ohne Code-Aender
                 │   ├── Backtesting: Signale loggen + alte aufloesen
                 │   └── Dashboard-Push an n8n
                 │
-                └── send_report.py sendet E-Mail
-                    └── HTML als Body, CSV als Anhang
+                └── Ergebnis im n8n Dashboard abrufbar
 
 Naechster Tag:
     python3 cfd_backtesting.py resolve   # Ergebnisse pruefen
@@ -430,7 +409,6 @@ Naechster Tag:
 - **Config-Fehler** (YAML-Syntax): Fallback auf eingebaute Defaults, Warnung im Terminal
 - **Dashboard-Push-Fehler**: wird abgefangen, Scanner laeuft weiter
 - **Backtesting-Fehler**: wird abgefangen ("nicht kritisch"), Scanner laeuft weiter
-- **E-Mail-Fehler**: wird von `run_scanner.sh` geloggt, Exit-Code bleibt 0 vom Scanner
 
 ---
 

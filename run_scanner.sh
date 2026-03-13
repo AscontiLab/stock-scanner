@@ -25,13 +25,8 @@ if [ $EXIT_CODE -eq 0 ]; then
     # echo "Pushe Dashboard-Daten ..." >> "$LOG_FILE"
     # /usr/bin/python3 "$SCRIPT_DIR/post_to_dashboard.py" >> "$LOG_FILE" 2>&1
 
-    echo "Sende E-Mail-Report ..." >> "$LOG_FILE"
-    /usr/bin/python3 "$SCRIPT_DIR/send_report.py" >> "$LOG_FILE" 2>&1
-    if [ $? -eq 0 ]; then
-        echo "E-Mail erfolgreich gesendet." >> "$LOG_FILE"
-    else
-        echo "FEHLER: E-Mail konnte nicht gesendet werden." >> "$LOG_FILE"
-    fi
+    # E-Mail deaktiviert — Dashboard reicht
+    # /usr/bin/python3 "$SCRIPT_DIR/send_report.py" >> "$LOG_FILE" 2>&1
 else
     echo "Scanner fehlgeschlagen — kein E-Mail-Versand." >> "$LOG_FILE"
 fi
