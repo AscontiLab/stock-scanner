@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% set active_page = "portfolio" %}
+{% block title %}Portfolio — Stock Scanner{% endblock %}
+
+{% block content %}
+<div x-data="portfolioApp()">
+
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold">Aktive Positionen ({{ positions|length }})</h1>
+        <button class="btn-primary text-sm" @click="refresh()">Aktualisieren</button>
+    </div>
+
+    {% if positions %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% for p in positions %}
+        <div class="card p-5" id="pos-{{ p.ticker }}">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <span class="text-xl font-bold text-white">{{ p.ticker }}</span>
+                    {% if p.direction == 'long' %}
+                    <span class="badge-long px-2 py-1 rounded text-xs font-bold">LONG</span>
+                    {% else %}
+                    <span class="badge-short px-2 py-1 rounded text-xs font-bold">SHORT</span>
+                    {% endif %}
+                </div>
+                <span class="text-xs text-gray-500">{{ p.market }}</span>
+            </div>
+
+            <!-- P&L -->
+            <div class="flex items-baseline gap-4 mb-4">
+                <span class="text-3xl font-bold {{ 'pnl-pos' if p.pnl_pct >= 0 else 'pnl-neg' }}">
+                    {{ "+" if p.pnl_pct >= 0 else "" }}{{ "%.1f"|format(p.pnl_pct) }}%
+                </span>
+                <span class="text-sm text-gray-400">
+                    {{ "+" if p.pnl_abs >= 0 else "" }}{{ "%.2f"|format(p.pnl_abs) }}
+                </span>
+                <span class="text-xs text-gray-500">Tag {{ p.days_held }}</span>
+            </div>
+
+            <!-- Preise -->
+            <div class="grid grid-cols-2 gap-3 mb-4 text-sm">
+                <div>
+                    <span class="text-gray-500">Entry</span>
+                    <span class="ml-2 text-white">{{ "%.2f"|format(p.entry_price) }}</span>
+                </div>
+                <div>
+                    <span class="text-gray-500">Aktuell</span>
+                    <span class="ml-2 text-white font-semibold">{{ "%.2f"|format(p.current_price) }}</span>
+                </div>
+            </div>
+
+            <!-- Levels -->
+            <div class="grid grid-cols-3 gap-3 mb-4 text-sm">
+                <div class="text-center p-2 rounded" style="background: #1e1215;">
+                    <div class="text-xs text-gray-500 mb-1">Stop</div>
+                    <div class="text-red-400 font-mono">{{ "%.2f"|format(p.stop_current) }}</div>
+                </div>
+                <div class="text-center p-2 rounded" style="background: #121e15;">
+                    <div class="text-xs text-gray-500 mb-1">TP1 {{ "OK" if p.tp1_hit else "" }}</div>
+                    <div class="text-green-400 font-mono">{{ "%.2f"|format(p.tp1) }}</div>
+                </div>
+                <div class="text-center p-2 rounded" style="background: #121e15;">
+                    <div class="text-xs text-gray-500 mb-1">TP2</div>
+                    <div class="text-green-400 font-mono">{{ "%.2f"|format(p.tp2) }}</div>
+                </div>
+            </div>
+
+            <!-- Empfehlung -->
+            <div class="flex items-center justify-between mb-3">
+                <span class="px-3 py-1.5 rounded-lg text-sm font-semibold"
+                    style="background: {{ p.rec_color }}22; color: {{ p.rec_color }};">
+                    {{ p.recommendation }}
+                </span>
+            </div>
+
+            <!-- Warnungen -->
+            {% if p.warnings %}
+            <div class="mb-3 space-y-1">
+                {% for w in p.warnings %}
+                <div class="text-xs text-orange-400 flex items-start gap-1">
+                    <span>&#9888;</span>
+                    <span>{{ w }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Indikatoren -->
+            {% if p.indicators %}
+            <div class="flex flex-wrap gap-2 mb-4 text-xs">
+                <span class="px-2 py-1 rounded bg-[#2a2d3a]">ADX {{ p.indicators.adx }}</span>
+                <span class="px-2 py-1 rounded bg-[#2a2d3a]">RSI {{ p.indicators.rsi }}</span>
+                <span class="px-2 py-1 rounded bg-[#2a2d3a]">Vol {{ p.indicators.vol_ratio }}x</span>
+            </div>
+            {% endif %}
+
+            <!-- Schliessen-Button -->
+            <button class="btn-danger w-full text-sm"
+                @click="closePosition('{{ p.ticker }}', '{{ p.direction }}', $el)">
+                Position schliessen
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card p-12 text-center">
+        <p class="text-gray-500 text-lg">Keine aktiven Positionen.</p>
+        <p class="text-gray-600 text-sm mt-2">Positionen via Signale-Seite hinzufuegen.</p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function portfolioApp() {
+    return {
+        async closePosition(ticker, direction, btn) {
+            if (!confirm('Position ' + ticker + ' wirklich schliessen?')) return;
+            btn.disabled = true;
+            btn.textContent = 'Wird geschlossen...';
+            try {
+                const resp = await fetch('/api/portfolio/close', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ticker, direction})
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    document.getElementById('pos-' + ticker).style.opacity = '0.3';
+                    btn.textContent = 'Geschlossen';
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    btn.textContent = data.error || 'Fehler';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                btn.textContent = 'Fehler';
+                btn.disabled = false;
+            }
+        },
+        refresh() {
+            location.reload();
+        }
+    }
+}
+</script>
+{% endblock %}

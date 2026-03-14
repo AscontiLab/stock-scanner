@@ -11,7 +11,9 @@ Verwendung:
     python3 stock_scanner.py --positions
 """
 
+import fcntl
 import json
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +23,15 @@ import yfinance as yf
 
 PORTFOLIO_PATH = Path(__file__).parent / "cfd_portfolio.json"
 
+
+def _send_telegram_position_alert(ticker, direction, event, price, pnl_pct):
+    """Sendet Telegram-Alert bei Stop/TP-Hit. Fehler werden geloggt."""
+    try:
+        from telegram_alerts import send_position_alert
+        send_position_alert(ticker, direction, event, price, pnl_pct)
+    except Exception as e:
+        print(f"Telegram-Alert fuer {ticker} fehlgeschlagen: {e}")
+
 # ATR-Multiplikatoren (zentrale Konstanten statt Hardcoding)
 ATR_STOP_MULT = 1.5   # Stop-Loss Abstand in ATR
 ATR_TP1_MULT = 1.5    # Take-Profit 1 Abstand in ATR
@@ -28,6 +39,19 @@ ATR_TP2_MULT = 4.0    # Take-Profit 2 Abstand in ATR
 ATR_TRAIL_MULT = 1.5  # Trailing-Stop Abstand in ATR (nach TP1-Hit)
 
 _EMPTY_PORTFOLIO = {"positions": []}
+
+
+@contextmanager
+def _portfolio_lock():
+    """File-Lock fuer Portfolio-JSON (verhindert Race Conditions)."""
+    lock_path = PORTFOLIO_PATH.with_suffix(".lock")
+    lock_file = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()
 
 
 def load_portfolio() -> dict:
@@ -73,44 +97,46 @@ def add_position(
     if direction not in ("long", "short"):
         raise ValueError(f"Richtung muss 'long' oder 'short' sein, nicht '{direction}'")
 
-    portfolio = load_portfolio()
+    with _portfolio_lock():
+        portfolio = load_portfolio()
 
-    # Duplikat-Check
-    for p in portfolio["positions"]:
-        if p["ticker"] == ticker.upper() and p["direction"] == direction:
-            print(f"Position {ticker.upper()} {direction} existiert bereits.")
-            return p
+        # Duplikat-Check
+        for p in portfolio["positions"]:
+            if p["ticker"] == ticker.upper() and p["direction"] == direction:
+                print(f"Position {ticker.upper()} {direction} existiert bereits.")
+                return p
 
-    # Auto-Fill aus CSV oder Live-Daten
-    if entry_price is None or stop is None:
-        entry_price, stop, tp1, tp2, atr, score, market = _lookup_levels(
-            ticker, direction
-        )
+        # Auto-Fill aus CSV oder Live-Daten
+        if entry_price is None or stop is None:
+            entry_price, stop, tp1, tp2, atr, score, market = _lookup_levels(
+                ticker, direction
+            )
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    pos_id = f"{ticker.upper()}_{direction}_{today}"
+        today = datetime.now().strftime("%Y-%m-%d")
+        pos_id = f"{ticker.upper()}_{direction}_{today}"
 
-    position = {
-        "id": pos_id,
-        "ticker": ticker.upper(),
-        "direction": direction,
-        "entry_price": round(entry_price, 2),
-        "entry_date": today,
-        "stop_original": round(stop, 2),
-        "stop_current": round(stop, 2),
-        "tp1": round(tp1, 2),
-        "tp2": round(tp2, 2),
-        "tp1_hit": False,
-        "tp1_hit_date": None,
-        "atr_at_entry": round(atr, 3) if atr else None,
-        "score_at_entry": round(score, 1) if score else None,
-        "market": market,
-        "highest_since_entry": round(entry_price, 2),
-        "lowest_since_entry": round(entry_price, 2),
-    }
+        position = {
+            "id": pos_id,
+            "ticker": ticker.upper(),
+            "direction": direction,
+            "entry_price": round(entry_price, 2),
+            "entry_date": today,
+            "stop_original": round(stop, 2),
+            "stop_current": round(stop, 2),
+            "tp1": round(tp1, 2),
+            "tp2": round(tp2, 2),
+            "tp1_hit": False,
+            "tp1_hit_date": None,
+            "atr_at_entry": round(atr, 3) if atr else None,
+            "score_at_entry": round(score, 1) if score else None,
+            "market": market,
+            "highest_since_entry": round(entry_price, 2),
+            "lowest_since_entry": round(entry_price, 2),
+        }
 
-    portfolio["positions"].append(position)
-    save_portfolio(portfolio)
+        portfolio["positions"].append(position)
+        save_portfolio(portfolio)
+
     print(f"Position hinzugefügt: {ticker.upper()} {direction.upper()} "
           f"@ {entry_price:.2f} | Stop {stop:.2f} | TP1 {tp1:.2f} | TP2 {tp2:.2f}")
     return position
@@ -174,18 +200,19 @@ def _lookup_levels(ticker: str, direction: str) -> tuple:
 def close_position(ticker: str, direction: str | None = None) -> bool:
     """Entfernt eine Position aus dem Portfolio."""
     ticker = ticker.upper()
-    portfolio = load_portfolio()
-    before = len(portfolio["positions"])
-    portfolio["positions"] = [
-        p for p in portfolio["positions"]
-        if not (p["ticker"] == ticker and (direction is None or p["direction"] == direction))
-    ]
-    after = len(portfolio["positions"])
-    if before > after:
-        save_portfolio(portfolio)
-        print(f"Position geschlossen: {ticker}" +
-              (f" {direction}" if direction else ""))
-        return True
+    with _portfolio_lock():
+        portfolio = load_portfolio()
+        before = len(portfolio["positions"])
+        portfolio["positions"] = [
+            p for p in portfolio["positions"]
+            if not (p["ticker"] == ticker and (direction is None or p["direction"] == direction))
+        ]
+        after = len(portfolio["positions"])
+        if before > after:
+            save_portfolio(portfolio)
+            print(f"Position geschlossen: {ticker}" +
+                  (f" {direction}" if direction else ""))
+            return True
     print(f"Keine offene Position für {ticker} gefunden.")
     return False
 
@@ -213,25 +240,27 @@ def check_positions(positions: list | None = None) -> list[dict]:
         return []
 
     reports = []
-    portfolio = load_portfolio()
 
-    for pos in positions:
-        try:
-            report = _check_single_position(pos)
-            reports.append(report)
-            # Position im Portfolio aktualisieren (Stop-Trailing etc.)
-            _update_position_in_portfolio(portfolio, pos)
-        except Exception as e:
-            print(f"  Fehler bei {pos['ticker']}: {e}")
-            reports.append({
-                "ticker": pos["ticker"],
-                "direction": pos["direction"],
-                "error": str(e),
-                "recommendation": "FEHLER",
-                "rec_color": "#7f8c8d",
-            })
+    with _portfolio_lock():
+        portfolio = load_portfolio()
 
-    save_portfolio(portfolio)
+        for pos in positions:
+            try:
+                report = _check_single_position(pos)
+                reports.append(report)
+                # Position im Portfolio aktualisieren (Stop-Trailing etc.)
+                _update_position_in_portfolio(portfolio, pos)
+            except Exception as e:
+                print(f"  Fehler bei {pos['ticker']}: {e}")
+                reports.append({
+                    "ticker": pos["ticker"],
+                    "direction": pos["direction"],
+                    "error": str(e),
+                    "recommendation": "FEHLER",
+                    "rec_color": "#7f8c8d",
+                })
+
+        save_portfolio(portfolio)
     return reports
 
 
@@ -316,17 +345,20 @@ def _check_single_position(pos: dict) -> dict:
 
     # ── SOFORT-EMPFEHLUNGEN ───────────────────────────────────────────────
     if stop_hit:
+        _send_telegram_position_alert(ticker, direction, "STOP GETROFFEN", current, pnl_pct)
         return _build_report(pos, current, pnl_pct, pnl_abs, days_held,
                              "STOP GETROFFEN", "#c0392b", ["Kurs hat den Stop erreicht."],
                              auto_close=True)
 
     if tp2_reached:
+        _send_telegram_position_alert(ticker, direction, "TP2 ERREICHT", current, pnl_pct)
         return _build_report(pos, current, pnl_pct, pnl_abs, days_held,
                              "TP2 ERREICHT — SCHLIESSEN", "#145a32",
                              ["Kursziel 2 erreicht. Position schliessen!"],
                              auto_close=True)
 
     if tp1_reached:
+        _send_telegram_position_alert(ticker, direction, "TP1 ERREICHT", current, pnl_pct)
         return _build_report(pos, current, pnl_pct, pnl_abs, days_held,
                              "TP1 ERREICHT — Teilgewinn", "#d4ac0d",
                              ["TP1 erreicht. Teilgewinn mitnehmen, Stop auf Break-Even."])

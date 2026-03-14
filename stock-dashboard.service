@@ -1,0 +1,15 @@
+[Unit]
+Description=Stock Scanner Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=claude-agent
+WorkingDirectory=/home/claude-agent/stock-scanner
+ExecStart=/usr/bin/python3 -m uvicorn dashboard.app:app --host 127.0.0.1 --port 8091
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1528,6 +1528,27 @@ def main():
     for r in sell_rows[:5]:
         print(f"  {r['ticker']:10s}  Score={r['net_score']:+d}  RSI={r['rsi']}  Kurs={r['price']}  {r['pct_change']:+.2f}%")
 
+    # --- Fear & Greed Multiplikator (Contrarian) ---
+    fg_value = fear_greed.get("value", 50)
+    if fg_value <= 20:
+        fg_long_m, fg_short_m = 1.2, 0.8   # Extreme Fear → Long staerker
+    elif fg_value <= 40:
+        fg_long_m, fg_short_m = 1.1, 0.9
+    elif fg_value <= 60:
+        fg_long_m, fg_short_m = 1.0, 1.0   # Neutral
+    elif fg_value <= 80:
+        fg_long_m, fg_short_m = 0.9, 1.1
+    else:
+        fg_long_m, fg_short_m = 0.8, 1.2   # Extreme Greed → Short staerker
+
+    for r in results:
+        r["cfd_long_score_raw"] = r["cfd_long_score"]
+        r["cfd_short_score_raw"] = r["cfd_short_score"]
+        r["cfd_long_score"] = round(min(r["cfd_long_score"] * fg_long_m, 10.0), 1)
+        r["cfd_short_score"] = round(min(r["cfd_short_score"] * fg_short_m, 10.0), 1)
+
+    print(f"\nF&G Multiplikator: Long x{fg_long_m}, Short x{fg_short_m} (F&G={fg_value})")
+
     # --- CFD Setups filtern (gewichteter Score >= Threshold, Top-N Cap) ---
     cfd_threshold = CFG["scoring"]["threshold"]
     cfd_top_n = CFG["cfd"]["top_n"]
@@ -1632,6 +1653,35 @@ def main():
         post_to_dashboard(str(output_dir), fear_greed)
     except Exception as e:
         print(f"Dashboard-Push übersprungen: {e}")
+
+    # --- Telegram Alerts ---
+    try:
+        from telegram_alerts import send_signal_alert, send_daily_summary
+        # Alerts fuer starke Signale (Score >= 7)
+        alert_count = 0
+        for r in cfd_long_rows:
+            if r["cfd_long_score"] >= 7.0:
+                send_signal_alert(r["ticker"], "long", r["cfd_long_score"],
+                                  r["price"], r["stop_long"], r["tp1_long"], r["tp2_long"],
+                                  r.get("market", ""))
+                alert_count += 1
+        for r in cfd_short_rows:
+            if r["cfd_short_score"] >= 7.0:
+                send_signal_alert(r["ticker"], "short", r["cfd_short_score"],
+                                  r["price"], r["stop_short"], r["tp1_short"], r["tp2_short"],
+                                  r.get("market", ""))
+                alert_count += 1
+        # Daily Summary
+        top_all = (
+            [{**r, "cfd_direction": "long"} for r in cfd_long_rows[:3]] +
+            [{**r, "cfd_direction": "short"} for r in cfd_short_rows[:3]]
+        )
+        send_daily_summary(fear_greed, len(cfd_long_rows), len(cfd_short_rows),
+                           top_all, len(positions))
+        if alert_count:
+            print(f"Telegram: {alert_count} Alerts gesendet")
+    except Exception as e:
+        print(f"Telegram übersprungen: {e}")
 
     # --- Open browser (nur interaktiv) ---
     if not args.no_open and sys.stdout.isatty():

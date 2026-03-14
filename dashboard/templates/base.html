@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Stock Scanner{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        body { background: #0f1117; color: #e2e8f0; }
+        .card { background: #1a1d29; border: 1px solid #2a2d3a; border-radius: 12px; }
+        .nav-link { color: #94a3b8; transition: color 0.2s; }
+        .nav-link:hover, .nav-link.active { color: #3b82f6; }
+        .badge-long { background: #064e3b; color: #10b981; }
+        .badge-short { background: #7f1d1d; color: #ef4444; }
+        .badge-buy { background: #064e3b; color: #10b981; }
+        .badge-sell { background: #7f1d1d; color: #ef4444; }
+        .score-bar { height: 6px; border-radius: 3px; background: #2a2d3a; }
+        .score-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1d29; }
+        ::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
+        .btn-primary { background: #3b82f6; color: white; padding: 6px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; transition: background 0.2s; cursor: pointer; border: none; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-primary:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+        .btn-danger { background: #dc2626; color: white; padding: 6px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; transition: background 0.2s; cursor: pointer; border: none; }
+        .btn-danger:hover { background: #b91c1c; }
+        .pnl-pos { color: #10b981; }
+        .pnl-neg { color: #ef4444; }
+        .fg-extreme-fear { color: #ef4444; }
+        .fg-fear { color: #f97316; }
+        .fg-neutral { color: #eab308; }
+        .fg-greed { color: #22c55e; }
+        .fg-extreme-greed { color: #10b981; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 10px 12px; color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #2a2d3a; }
+        td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #1e2130; }
+        tr:hover td { background: #1e2130; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body class="min-h-screen">
+    <!-- Navigation -->
+    <nav class="border-b border-[#2a2d3a] px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-xl font-bold text-white">Stock Scanner</span>
+            </div>
+            <div class="flex gap-6">
+                <a href="/" class="nav-link {% if active_page == 'signals' %}active{% endif %}">Signale</a>
+                <a href="/portfolio" class="nav-link {% if active_page == 'portfolio' %}active{% endif %}">Portfolio</a>
+                <a href="/backtesting" class="nav-link {% if active_page == 'backtesting' %}active{% endif %}">Backtesting</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-6 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
