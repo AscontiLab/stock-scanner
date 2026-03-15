@@ -8,238 +8,246 @@
     <!-- Header mit F&G Badge und Scan-Zeit -->
     <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div class="flex items-center gap-4">
-            <h1 class="text-2xl font-bold">Signale</h1>
-            <div class="card px-4 py-2 flex items-center gap-2">
-                <span class="text-sm text-gray-400">Fear & Greed</span>
+            <h1 class="text-2xl font-bold" style="color: var(--cyan);">Signale</h1>
+            <!-- Fear & Greed Display -->
+            <div class="card px-5 py-3 flex items-center gap-3">
                 {% set fg_val = fear_greed.value|int %}
                 {% if fg_val <= 20 %}
-                <span class="text-lg font-bold fg-extreme-fear">{{ fg_val }}</span>
-                <span class="text-xs fg-extreme-fear">{{ fear_greed.label }}</span>
+                    {% set fg_class = "fg-extreme-fear" %}
+                    {% set fg_bg = "rgba(255, 59, 92, 0.15)" %}
                 {% elif fg_val <= 40 %}
-                <span class="text-lg font-bold fg-fear">{{ fg_val }}</span>
-                <span class="text-xs fg-fear">{{ fear_greed.label }}</span>
+                    {% set fg_class = "fg-fear" %}
+                    {% set fg_bg = "rgba(255, 149, 0, 0.15)" %}
                 {% elif fg_val <= 60 %}
-                <span class="text-lg font-bold fg-neutral">{{ fg_val }}</span>
-                <span class="text-xs fg-neutral">{{ fear_greed.label }}</span>
+                    {% set fg_class = "fg-neutral" %}
+                    {% set fg_bg = "rgba(200, 170, 110, 0.15)" %}
                 {% elif fg_val <= 80 %}
-                <span class="text-lg font-bold fg-greed">{{ fg_val }}</span>
-                <span class="text-xs fg-greed">{{ fear_greed.label }}</span>
+                    {% set fg_class = "fg-greed" %}
+                    {% set fg_bg = "rgba(0, 255, 136, 0.15)" %}
                 {% else %}
-                <span class="text-lg font-bold fg-extreme-greed">{{ fg_val }}</span>
-                <span class="text-xs fg-extreme-greed">{{ fear_greed.label }}</span>
+                    {% set fg_class = "fg-extreme-greed" %}
+                    {% set fg_bg = "rgba(0, 240, 255, 0.15)" %}
                 {% endif %}
+                <div class="flex flex-col items-center">
+                    <span class="text-xs" style="color: var(--text-muted);">Fear & Greed</span>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="text-2xl font-bold mono pulse {{ fg_class }}">{{ fg_val }}</span>
+                        <span class="px-2 py-0.5 rounded text-xs font-semibold {{ fg_class }}"
+                            style="background: {{ fg_bg }};">{{ fear_greed.label }}</span>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="text-sm text-gray-500">
-            Letzter Scan: {{ scan_time }}
+        <div class="text-sm" style="color: var(--text-dim);">
+            Letzter Scan: <span class="mono">{{ scan_time }}</span>
         </div>
     </div>
 
-    <!-- CFD Long Setups -->
-    <div class="card p-5 mb-6">
-        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-            <span class="badge-long px-2 py-1 rounded text-xs font-bold">LONG</span>
-            CFD Long Setups ({{ cfd_long|length }})
-        </h2>
-        {% if cfd_long %}
-        <div class="overflow-x-auto">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Ticker</th>
-                        <th>Markt</th>
-                        <th>Score</th>
-                        <th>Kurs</th>
-                        <th>ADX</th>
-                        <th>RSI</th>
-                        <th>Vol</th>
-                        <th>Stop</th>
-                        <th>TP1</th>
-                        <th>TP2</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in cfd_long %}
-                    <tr>
-                        <td class="font-semibold text-white">{{ r.ticker }}</td>
-                        <td class="text-gray-400 text-xs">{{ r.market }}</td>
-                        <td>
-                            <div class="flex items-center gap-2">
-                                <span class="font-bold text-green-400">{{ "%.1f"|format(r.cfd_long_score|float) }}</span>
-                                <div class="score-bar w-16">
-                                    <div class="score-fill bg-green-500" style="width: {{ (r.cfd_long_score|float / 10 * 100)|int }}%"></div>
+    <!-- CFD Setups Grid: Long + Short nebeneinander -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <!-- CFD Long Setups -->
+        <div class="card p-5">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span class="badge-long px-2 py-1 rounded text-xs font-bold">LONG</span>
+                CFD Long Setups
+                <span class="mono text-sm" style="color: var(--text-muted);">({{ cfd_long|length }})</span>
+            </h2>
+            {% if cfd_long %}
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Score</th>
+                            <th>Kurs</th>
+                            <th>ADX</th>
+                            <th>RSI</th>
+                            <th>Stop</th>
+                            <th>TP1</th>
+                            <th>TP2</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in cfd_long %}
+                        {% set score_val = r.cfd_long_score|float %}
+                        <tr>
+                            <td>
+                                <div class="font-semibold text-white">{{ r.ticker }}</div>
+                                <div class="text-xs" style="color: var(--text-dim);">{{ r.market }}</div>
+                            </td>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold mono" style="color: var(--green);">{{ "%.1f"|format(score_val) }}</span>
+                                    <div class="score-bar w-14">
+                                        <div class="score-fill score-fill-gradient-green" style="width: {{ (score_val / 10 * 100)|int }}%"></div>
+                                    </div>
                                 </div>
-                            </div>
-                        </td>
-                        <td>{{ r.price }}</td>
-                        <td>{{ r.adx }}</td>
-                        <td>{{ r.rsi }}</td>
-                        <td>{{ "%.1f"|format(r.vol_ratio|float) }}x</td>
-                        <td class="text-red-400">{{ r.stop_long }}</td>
-                        <td class="text-green-400">{{ r.tp1_long }}</td>
-                        <td class="text-green-400">{{ r.tp2_long }}</td>
-                        <td>
-                            <button class="btn-primary text-xs"
-                                @click="addPosition('{{ r.ticker }}', 'long', $event)"
-                                :disabled="adding">+Position</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                            </td>
+                            <td class="mono text-sm">{{ r.price }}</td>
+                            <td class="mono text-sm">{{ r.adx }}</td>
+                            <td class="mono text-sm">{{ r.rsi }}</td>
+                            <td class="mono text-sm" style="color: var(--red);">{{ r.stop_long }}</td>
+                            <td class="mono text-sm" style="color: var(--green);">{{ r.tp1_long }}</td>
+                            <td class="mono text-sm" style="color: var(--green);">{{ r.tp2_long }}</td>
+                            <td>
+                                <button class="btn-primary text-xs"
+                                    @click="addPosition('{{ r.ticker }}', 'long', $event)"
+                                    :disabled="adding">+</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-sm" style="color: var(--text-dim);">Keine Long-Setups heute.</p>
+            {% endif %}
         </div>
-        {% else %}
-        <p class="text-gray-500 text-sm">Keine Long-Setups heute.</p>
+
+        <!-- CFD Short Setups -->
+        <div class="card p-5">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span class="badge-short px-2 py-1 rounded text-xs font-bold">SHORT</span>
+                CFD Short Setups
+                <span class="mono text-sm" style="color: var(--text-muted);">({{ cfd_short|length }})</span>
+            </h2>
+            {% if cfd_short %}
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Score</th>
+                            <th>Kurs</th>
+                            <th>ADX</th>
+                            <th>RSI</th>
+                            <th>Stop</th>
+                            <th>TP1</th>
+                            <th>TP2</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in cfd_short %}
+                        {% set score_val = r.cfd_short_score|float %}
+                        <tr>
+                            <td>
+                                <div class="font-semibold text-white">{{ r.ticker }}</div>
+                                <div class="text-xs" style="color: var(--text-dim);">{{ r.market }}</div>
+                            </td>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold mono" style="color: var(--red);">{{ "%.1f"|format(score_val) }}</span>
+                                    <div class="score-bar w-14">
+                                        <div class="score-fill score-fill-gradient-red" style="width: {{ (score_val / 10 * 100)|int }}%"></div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="mono text-sm">{{ r.price }}</td>
+                            <td class="mono text-sm">{{ r.adx }}</td>
+                            <td class="mono text-sm">{{ r.rsi }}</td>
+                            <td class="mono text-sm" style="color: var(--red);">{{ r.stop_short }}</td>
+                            <td class="mono text-sm" style="color: var(--green);">{{ r.tp1_short }}</td>
+                            <td class="mono text-sm" style="color: var(--green);">{{ r.tp2_short }}</td>
+                            <td>
+                                <button class="btn-primary text-xs"
+                                    @click="addPosition('{{ r.ticker }}', 'short', $event)"
+                                    :disabled="adding">+</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-sm" style="color: var(--text-dim);">Keine Short-Setups heute.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Buy / Sell Signals Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <!-- Buy Signals -->
+        {% if buy_rows %}
+        <div class="card p-5">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span class="badge-buy px-2 py-1 rounded text-xs font-bold">BUY</span>
+                Kaufsignale
+                <span class="mono text-sm" style="color: var(--text-muted);">({{ buy_rows|length }})</span>
+            </h2>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Score</th>
+                            <th>Kurs</th>
+                            <th>%</th>
+                            <th>RSI</th>
+                            <th>Vol</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in buy_rows %}
+                        <tr>
+                            <td>
+                                <div class="font-semibold text-white">{{ r.ticker }}</div>
+                                <div class="text-xs" style="color: var(--text-dim);">{{ r.name|truncate(20) }}</div>
+                            </td>
+                            <td class="font-bold mono" style="color: var(--green);">+{{ r.net_score }}</td>
+                            <td class="mono text-sm">{{ r.price }}</td>
+                            <td class="mono text-sm {{ 'pnl-pos' if r.pct_change|float >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(r.pct_change|float) }}%</td>
+                            <td class="mono text-sm">{{ r.rsi }}</td>
+                            <td class="mono text-sm">{{ "%.1f"|format(r.vol_ratio|float) }}x</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Sell Signals -->
+        {% if sell_rows %}
+        <div class="card p-5">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span class="badge-sell px-2 py-1 rounded text-xs font-bold">SELL</span>
+                Verkaufssignale
+                <span class="mono text-sm" style="color: var(--text-muted);">({{ sell_rows|length }})</span>
+            </h2>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Score</th>
+                            <th>Kurs</th>
+                            <th>%</th>
+                            <th>RSI</th>
+                            <th>Vol</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in sell_rows %}
+                        <tr>
+                            <td>
+                                <div class="font-semibold text-white">{{ r.ticker }}</div>
+                                <div class="text-xs" style="color: var(--text-dim);">{{ r.name|truncate(20) }}</div>
+                            </td>
+                            <td class="font-bold mono" style="color: var(--red);">{{ r.net_score }}</td>
+                            <td class="mono text-sm">{{ r.price }}</td>
+                            <td class="mono text-sm {{ 'pnl-pos' if r.pct_change|float >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(r.pct_change|float) }}%</td>
+                            <td class="mono text-sm">{{ r.rsi }}</td>
+                            <td class="mono text-sm">{{ "%.1f"|format(r.vol_ratio|float) }}x</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
         {% endif %}
     </div>
-
-    <!-- CFD Short Setups -->
-    <div class="card p-5 mb-6">
-        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-            <span class="badge-short px-2 py-1 rounded text-xs font-bold">SHORT</span>
-            CFD Short Setups ({{ cfd_short|length }})
-        </h2>
-        {% if cfd_short %}
-        <div class="overflow-x-auto">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Ticker</th>
-                        <th>Markt</th>
-                        <th>Score</th>
-                        <th>Kurs</th>
-                        <th>ADX</th>
-                        <th>RSI</th>
-                        <th>Vol</th>
-                        <th>Stop</th>
-                        <th>TP1</th>
-                        <th>TP2</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in cfd_short %}
-                    <tr>
-                        <td class="font-semibold text-white">{{ r.ticker }}</td>
-                        <td class="text-gray-400 text-xs">{{ r.market }}</td>
-                        <td>
-                            <div class="flex items-center gap-2">
-                                <span class="font-bold text-red-400">{{ "%.1f"|format(r.cfd_short_score|float) }}</span>
-                                <div class="score-bar w-16">
-                                    <div class="score-fill bg-red-500" style="width: {{ (r.cfd_short_score|float / 10 * 100)|int }}%"></div>
-                                </div>
-                            </div>
-                        </td>
-                        <td>{{ r.price }}</td>
-                        <td>{{ r.adx }}</td>
-                        <td>{{ r.rsi }}</td>
-                        <td>{{ "%.1f"|format(r.vol_ratio|float) }}x</td>
-                        <td class="text-red-400">{{ r.stop_short }}</td>
-                        <td class="text-green-400">{{ r.tp1_short }}</td>
-                        <td class="text-green-400">{{ r.tp2_short }}</td>
-                        <td>
-                            <button class="btn-primary text-xs"
-                                @click="addPosition('{{ r.ticker }}', 'short', $event)"
-                                :disabled="adding">+Position</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <p class="text-gray-500 text-sm">Keine Short-Setups heute.</p>
-        {% endif %}
-    </div>
-
-    <!-- Buy Signals -->
-    {% if buy_rows %}
-    <div class="card p-5 mb-6">
-        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-            <span class="badge-buy px-2 py-1 rounded text-xs font-bold">BUY</span>
-            Kaufsignale ({{ buy_rows|length }})
-        </h2>
-        <div class="overflow-x-auto">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Ticker</th>
-                        <th>Name</th>
-                        <th>Markt</th>
-                        <th>Score</th>
-                        <th>Kurs</th>
-                        <th>%</th>
-                        <th>RSI</th>
-                        <th>MACD</th>
-                        <th>MA</th>
-                        <th>Vol</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in buy_rows %}
-                    <tr>
-                        <td class="font-semibold text-white">{{ r.ticker }}</td>
-                        <td class="text-gray-400 text-xs max-w-[120px] truncate">{{ r.name }}</td>
-                        <td class="text-gray-400 text-xs">{{ r.market }}</td>
-                        <td class="font-bold text-green-400">+{{ r.net_score }}</td>
-                        <td>{{ r.price }}</td>
-                        <td class="{{ 'pnl-pos' if r.pct_change|float >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(r.pct_change|float) }}%</td>
-                        <td>{{ r.rsi }}</td>
-                        <td>{{ r.macd }}</td>
-                        <td>{{ r.ma }}</td>
-                        <td>{{ "%.1f"|format(r.vol_ratio|float) }}x</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- Sell Signals -->
-    {% if sell_rows %}
-    <div class="card p-5 mb-6">
-        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-            <span class="badge-sell px-2 py-1 rounded text-xs font-bold">SELL</span>
-            Verkaufssignale ({{ sell_rows|length }})
-        </h2>
-        <div class="overflow-x-auto">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Ticker</th>
-                        <th>Name</th>
-                        <th>Markt</th>
-                        <th>Score</th>
-                        <th>Kurs</th>
-                        <th>%</th>
-                        <th>RSI</th>
-                        <th>MACD</th>
-                        <th>MA</th>
-                        <th>Vol</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in sell_rows %}
-                    <tr>
-                        <td class="font-semibold text-white">{{ r.ticker }}</td>
-                        <td class="text-gray-400 text-xs max-w-[120px] truncate">{{ r.name }}</td>
-                        <td class="text-gray-400 text-xs">{{ r.market }}</td>
-                        <td class="font-bold text-red-400">{{ r.net_score }}</td>
-                        <td>{{ r.price }}</td>
-                        <td class="{{ 'pnl-pos' if r.pct_change|float >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(r.pct_change|float) }}%</td>
-                        <td>{{ r.rsi }}</td>
-                        <td>{{ r.macd }}</td>
-                        <td>{{ r.ma }}</td>
-                        <td>{{ "%.1f"|format(r.vol_ratio|float) }}x</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
 
 </div>
 {% endblock %}
@@ -260,18 +268,18 @@ function signalsApp() {
                 });
                 const data = await resp.json();
                 if (data.ok) {
-                    btn.textContent = 'Hinzugefuegt';
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('bg-green-800', 'text-green-300', 'px-3', 'py-1', 'rounded', 'text-xs');
+                    btn.textContent = 'OK';
                     btn.disabled = true;
+                    btn.style.background = 'rgba(0,255,136,0.2)';
+                    btn.style.borderColor = 'rgba(0,255,136,0.4)';
+                    btn.style.color = '#00ff88';
                 } else {
-                    btn.textContent = data.error || 'Fehler';
-                    btn.classList.add('bg-red-800');
-                    setTimeout(() => { btn.textContent = '+Position'; btn.classList.remove('bg-red-800'); }, 2000);
+                    btn.textContent = '!';
+                    setTimeout(() => { btn.textContent = '+'; }, 2000);
                 }
             } catch (e) {
-                btn.textContent = 'Fehler';
-                setTimeout(() => { btn.textContent = '+Position'; }, 2000);
+                btn.textContent = '!';
+                setTimeout(() => { btn.textContent = '+'; }, 2000);
             }
             this.adding = false;
         },

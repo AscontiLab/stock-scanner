@@ -3,18 +3,50 @@
 {% block title %}Portfolio — Stock Scanner{% endblock %}
 
 {% block content %}
-<div x-data="portfolioApp()">
+<div x-data="portfolioApp()" x-init="startAutoRefresh()">
 
+    <!-- Header -->
     <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold">Aktive Positionen ({{ positions|length }})</h1>
-        <button class="btn-primary text-sm" @click="refresh()">Aktualisieren</button>
+        <h1 class="text-2xl font-bold" style="color: var(--cyan);">
+            Aktive Positionen
+            <span class="mono text-lg" style="color: var(--text-muted);">({{ positions|length }})</span>
+        </h1>
+        <div class="flex items-center gap-3">
+            <span class="text-xs" style="color: var(--text-dim);" x-text="'Auto-Refresh: ' + countdown + 's'"></span>
+            <button class="btn-primary text-sm" @click="refresh()">Aktualisieren</button>
+        </div>
     </div>
 
     {% if positions %}
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- Gesamt-P&L Summary Card -->
+    {% set ns = namespace(total_pnl=0, count=0) %}
+    {% for p in positions %}
+        {% set ns.total_pnl = ns.total_pnl + p.pnl_pct %}
+        {% set ns.count = ns.count + 1 %}
+    {% endfor %}
+    <div class="card p-4 mb-6 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <span class="text-sm" style="color: var(--text-muted);">Gesamt-Performance</span>
+            <span class="text-2xl font-bold mono {{ 'pnl-pos' if ns.total_pnl >= 0 else 'pnl-neg' }}">
+                {{ "+" if ns.total_pnl >= 0 else "" }}{{ "%.1f"|format(ns.total_pnl) }}%
+            </span>
+        </div>
+        <span class="text-sm mono" style="color: var(--text-dim);">{{ ns.count }} Position{{ 'en' if ns.count != 1 }}</span>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
         {% for p in positions %}
-        <div class="card p-5" id="pos-{{ p.ticker }}">
-            <!-- Header -->
+        <div class="card p-5" id="pos-{{ p.ticker }}-{{ p.direction }}">
+
+            <!-- Empfehlung Badge (prominent oben) -->
+            <div class="mb-4 text-center">
+                <span class="inline-block px-5 py-2 rounded-xl text-sm font-bold tracking-wide"
+                    style="background: {{ p.rec_color }}20; color: {{ p.rec_color }}; border: 1px solid {{ p.rec_color }}40; text-shadow: 0 0 12px {{ p.rec_color }}40;">
+                    {{ p.recommendation }}
+                </span>
+            </div>
+
+            <!-- Header: Ticker + Direction -->
             <div class="flex items-center justify-between mb-3">
                 <div class="flex items-center gap-3">
                     <span class="text-xl font-bold text-white">{{ p.ticker }}</span>
@@ -24,74 +56,100 @@
                     <span class="badge-short px-2 py-1 rounded text-xs font-bold">SHORT</span>
                     {% endif %}
                 </div>
-                <span class="text-xs text-gray-500">{{ p.market }}</span>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs" style="color: var(--text-dim);">{{ p.market }}</span>
+                    <span class="text-xs mono" style="color: var(--text-dim);">Tag {{ p.days_held }}</span>
+                </div>
             </div>
 
-            <!-- P&L -->
+            <!-- P&L gross -->
             <div class="flex items-baseline gap-4 mb-4">
-                <span class="text-3xl font-bold {{ 'pnl-pos' if p.pnl_pct >= 0 else 'pnl-neg' }}">
+                <span class="text-4xl font-bold mono {{ 'pnl-pos' if p.pnl_pct >= 0 else 'pnl-neg' }}">
                     {{ "+" if p.pnl_pct >= 0 else "" }}{{ "%.1f"|format(p.pnl_pct) }}%
                 </span>
-                <span class="text-sm text-gray-400">
+                <span class="text-sm mono" style="color: var(--text-muted);">
                     {{ "+" if p.pnl_abs >= 0 else "" }}{{ "%.2f"|format(p.pnl_abs) }}
                 </span>
-                <span class="text-xs text-gray-500">Tag {{ p.days_held }}</span>
             </div>
 
             <!-- Preise -->
             <div class="grid grid-cols-2 gap-3 mb-4 text-sm">
                 <div>
-                    <span class="text-gray-500">Entry</span>
-                    <span class="ml-2 text-white">{{ "%.2f"|format(p.entry_price) }}</span>
+                    <span style="color: var(--text-dim);">Entry</span>
+                    <span class="ml-2 text-white mono">{{ "%.2f"|format(p.entry_price) }}</span>
                 </div>
                 <div>
-                    <span class="text-gray-500">Aktuell</span>
-                    <span class="ml-2 text-white font-semibold">{{ "%.2f"|format(p.current_price) }}</span>
+                    <span style="color: var(--text-dim);">Aktuell</span>
+                    <span class="ml-2 text-white font-semibold mono">{{ "%.2f"|format(p.current_price) }}</span>
                 </div>
             </div>
 
-            <!-- Levels -->
-            <div class="grid grid-cols-3 gap-3 mb-4 text-sm">
-                <div class="text-center p-2 rounded" style="background: #1e1215;">
-                    <div class="text-xs text-gray-500 mb-1">Stop</div>
-                    <div class="text-red-400 font-mono">{{ "%.2f"|format(p.stop_current) }}</div>
+            <!-- Trailing Stop Visualisierung -->
+            {% if p.direction == 'long' %}
+                {% set range_total = p.tp2 - p.stop_current %}
+                {% set price_pos = p.current_price - p.stop_current %}
+                {% set tp1_pos = p.tp1 - p.stop_current %}
+            {% else %}
+                {% set range_total = p.stop_current - p.tp2 %}
+                {% set price_pos = p.stop_current - p.current_price %}
+                {% set tp1_pos = p.stop_current - p.tp1 %}
+            {% endif %}
+            {% if range_total > 0 %}
+                {% set price_pct = (price_pos / range_total * 100) %}
+                {% set tp1_pct = (tp1_pos / range_total * 100) %}
+                {% if price_pct < 0 %}{% set price_pct = 0 %}{% endif %}
+                {% if price_pct > 100 %}{% set price_pct = 100 %}{% endif %}
+            {% else %}
+                {% set price_pct = 50 %}
+                {% set tp1_pct = 50 %}
+            {% endif %}
+            <div class="mb-4">
+                <div class="flex justify-between text-xs mono mb-1" style="color: var(--text-dim);">
+                    <span style="color: var(--red);">Stop {{ "%.0f"|format(p.stop_current) }}</span>
+                    <span style="color: var(--gold);">TP1 {{ "%.0f"|format(p.tp1) }}</span>
+                    <span style="color: var(--green);">TP2 {{ "%.0f"|format(p.tp2) }}</span>
                 </div>
-                <div class="text-center p-2 rounded" style="background: #121e15;">
-                    <div class="text-xs text-gray-500 mb-1">TP1 {{ "OK" if p.tp1_hit else "" }}</div>
-                    <div class="text-green-400 font-mono">{{ "%.2f"|format(p.tp1) }}</div>
+                <div class="progress-track">
+                    <!-- Fill bis zum aktuellen Kurs -->
+                    <div class="progress-fill" style="width: {{ price_pct|int }}%;
+                        background: linear-gradient(90deg, var(--red), {% if price_pct > tp1_pct %}var(--green){% else %}var(--gold){% endif %});
+                        opacity: 0.6;"></div>
+                    <!-- TP1 Marker -->
+                    <div class="progress-marker" style="left: {{ tp1_pct|int }}%; background: var(--gold);"></div>
+                    <!-- Current Price Marker -->
+                    <div class="progress-marker" style="left: {{ price_pct|int }}%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan);"></div>
                 </div>
-                <div class="text-center p-2 rounded" style="background: #121e15;">
-                    <div class="text-xs text-gray-500 mb-1">TP2</div>
-                    <div class="text-green-400 font-mono">{{ "%.2f"|format(p.tp2) }}</div>
-                </div>
+                {% if p.tp1_hit %}
+                <div class="text-xs mt-1 text-center" style="color: var(--gold);">TP1 erreicht — Trailing Stop aktiv</div>
+                {% endif %}
             </div>
 
-            <!-- Empfehlung -->
-            <div class="flex items-center justify-between mb-3">
-                <span class="px-3 py-1.5 rounded-lg text-sm font-semibold"
-                    style="background: {{ p.rec_color }}22; color: {{ p.rec_color }};">
-                    {{ p.recommendation }}
-                </span>
-            </div>
-
-            <!-- Warnungen -->
+            <!-- Warnungen (Akkordeon) -->
             {% if p.warnings %}
-            <div class="mb-3 space-y-1">
-                {% for w in p.warnings %}
-                <div class="text-xs text-orange-400 flex items-start gap-1">
-                    <span>&#9888;</span>
-                    <span>{{ w }}</span>
+            <div class="mb-3" x-data="{ open: false }">
+                <button @click="open = !open"
+                    class="w-full text-left text-xs px-3 py-2 rounded-lg flex items-center justify-between"
+                    style="background: rgba(255, 149, 0, 0.08); color: var(--orange); border: 1px solid rgba(255, 149, 0, 0.15);">
+                    <span>{{ p.warnings|length }} Warnung{{ 'en' if p.warnings|length != 1 }}</span>
+                    <span x-text="open ? '−' : '+'"></span>
+                </button>
+                <div class="accordion-content mt-2 space-y-1 px-2" :class="{ 'open': open }">
+                    {% for w in p.warnings %}
+                    <div class="text-xs flex items-start gap-1" style="color: var(--orange);">
+                        <span>&#9888;</span>
+                        <span>{{ w }}</span>
+                    </div>
+                    {% endfor %}
                 </div>
-                {% endfor %}
             </div>
             {% endif %}
 
             <!-- Indikatoren -->
             {% if p.indicators %}
             <div class="flex flex-wrap gap-2 mb-4 text-xs">
-                <span class="px-2 py-1 rounded bg-[#2a2d3a]">ADX {{ p.indicators.adx }}</span>
-                <span class="px-2 py-1 rounded bg-[#2a2d3a]">RSI {{ p.indicators.rsi }}</span>
-                <span class="px-2 py-1 rounded bg-[#2a2d3a]">Vol {{ p.indicators.vol_ratio }}x</span>
+                <span class="px-2 py-1 rounded mono" style="background: rgba(0,240,255,0.06); border: 1px solid rgba(0,240,255,0.1);">ADX {{ p.indicators.adx }}</span>
+                <span class="px-2 py-1 rounded mono" style="background: rgba(0,240,255,0.06); border: 1px solid rgba(0,240,255,0.1);">RSI {{ p.indicators.rsi }}</span>
+                <span class="px-2 py-1 rounded mono" style="background: rgba(0,240,255,0.06); border: 1px solid rgba(0,240,255,0.1);">Vol {{ p.indicators.vol_ratio }}x</span>
             </div>
             {% endif %}
 
@@ -105,8 +163,8 @@
     </div>
     {% else %}
     <div class="card p-12 text-center">
-        <p class="text-gray-500 text-lg">Keine aktiven Positionen.</p>
-        <p class="text-gray-600 text-sm mt-2">Positionen via Signale-Seite hinzufuegen.</p>
+        <p class="text-lg" style="color: var(--text-muted);">Keine aktiven Positionen.</p>
+        <p class="text-sm mt-2" style="color: var(--text-dim);">Positionen via Signale-Seite hinzufuegen.</p>
     </div>
     {% endif %}
 
@@ -117,6 +175,16 @@
 <script>
 function portfolioApp() {
     return {
+        countdown: 300,
+        timer: null,
+        startAutoRefresh() {
+            this.timer = setInterval(() => {
+                this.countdown--;
+                if (this.countdown <= 0) {
+                    window.location.reload();
+                }
+            }, 1000);
+        },
         async closePosition(ticker, direction, btn) {
             if (!confirm('Position ' + ticker + ' wirklich schliessen?')) return;
             btn.disabled = true;
@@ -129,7 +197,8 @@ function portfolioApp() {
                 });
                 const data = await resp.json();
                 if (data.ok) {
-                    document.getElementById('pos-' + ticker).style.opacity = '0.3';
+                    const el = document.getElementById('pos-' + ticker + '-' + direction);
+                    if (el) el.style.opacity = '0.3';
                     btn.textContent = 'Geschlossen';
                     setTimeout(() => location.reload(), 1000);
                 } else {

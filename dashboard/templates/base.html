@@ -7,47 +7,211 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg: #0a0a1a;
+            --bg-card: rgba(15, 15, 35, 0.7);
+            --bg-card-hover: rgba(20, 20, 45, 0.8);
+            --border: rgba(0, 240, 255, 0.1);
+            --border-hover: rgba(0, 240, 255, 0.25);
+            --cyan: #00f0ff;
+            --gold: #c8aa6e;
+            --green: #00ff88;
+            --pink: #ff006e;
+            --red: #ff3b5c;
+            --orange: #ff9500;
+            --text: #e2e8f0;
+            --text-muted: #64748b;
+            --text-dim: #475569;
+        }
         * { font-family: 'Inter', sans-serif; }
-        body { background: #0f1117; color: #e2e8f0; }
-        .card { background: #1a1d29; border: 1px solid #2a2d3a; border-radius: 12px; }
-        .nav-link { color: #94a3b8; transition: color 0.2s; }
-        .nav-link:hover, .nav-link.active { color: #3b82f6; }
-        .badge-long { background: #064e3b; color: #10b981; }
-        .badge-short { background: #7f1d1d; color: #ef4444; }
-        .badge-buy { background: #064e3b; color: #10b981; }
-        .badge-sell { background: #7f1d1d; color: #ef4444; }
-        .score-bar { height: 6px; border-radius: 3px; background: #2a2d3a; }
-        .score-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        body { background: var(--bg); color: var(--text); }
+
+        /* Scanline-Header */
+        .scanline-header {
+            position: relative;
+            overflow: hidden;
+        }
+        .scanline-header::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(transparent 50%, rgba(0, 240, 255, 0.02) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+
+        /* Glassmorphism Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            backdrop-filter: blur(12px);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .card:hover {
+            border-color: var(--border-hover);
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.05);
+        }
+
+        /* Navigation */
+        .nav-link {
+            color: var(--text-muted);
+            transition: color 0.2s;
+            position: relative;
+            padding-bottom: 4px;
+        }
+        .nav-link:hover { color: var(--cyan); }
+        .nav-link.active {
+            color: var(--cyan);
+        }
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0; right: 0;
+            height: 2px;
+            background: var(--cyan);
+            border-radius: 1px;
+            box-shadow: 0 0 8px var(--cyan);
+        }
+
+        /* Badges */
+        .badge-long { background: rgba(0, 255, 136, 0.15); color: var(--green); border: 1px solid rgba(0, 255, 136, 0.3); }
+        .badge-short { background: rgba(255, 59, 92, 0.15); color: var(--red); border: 1px solid rgba(255, 59, 92, 0.3); }
+        .badge-buy { background: rgba(0, 255, 136, 0.15); color: var(--green); border: 1px solid rgba(0, 255, 136, 0.3); }
+        .badge-sell { background: rgba(255, 59, 92, 0.15); color: var(--red); border: 1px solid rgba(255, 59, 92, 0.3); }
+
+        /* Score Bars */
+        .score-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.05); }
+        .score-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+        .score-fill-gradient-green {
+            background: linear-gradient(90deg, #00ff88, #00f0ff);
+            box-shadow: 0 0 6px rgba(0, 255, 136, 0.4);
+        }
+        .score-fill-gradient-red {
+            background: linear-gradient(90deg, var(--pink), var(--red));
+            box-shadow: 0 0 6px rgba(255, 0, 110, 0.4);
+        }
+
+        /* Scrollbar */
         ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1a1d29; }
-        ::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
-        .btn-primary { background: #3b82f6; color: white; padding: 6px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; transition: background 0.2s; cursor: pointer; border: none; }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-primary:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
-        .btn-danger { background: #dc2626; color: white; padding: 6px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; transition: background 0.2s; cursor: pointer; border: none; }
-        .btn-danger:hover { background: #b91c1c; }
-        .pnl-pos { color: #10b981; }
-        .pnl-neg { color: #ef4444; }
-        .fg-extreme-fear { color: #ef4444; }
-        .fg-fear { color: #f97316; }
-        .fg-neutral { color: #eab308; }
-        .fg-greed { color: #22c55e; }
-        .fg-extreme-greed { color: #10b981; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.15); border-radius: 3px; }
+
+        /* Buttons */
+        .btn-primary {
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(0, 240, 255, 0.1));
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            color: var(--cyan);
+            padding: 6px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.3), rgba(0, 240, 255, 0.2));
+            box-shadow: 0 0 12px rgba(0, 240, 255, 0.2);
+        }
+        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-danger {
+            background: linear-gradient(135deg, rgba(255, 59, 92, 0.2), rgba(255, 59, 92, 0.1));
+            border: 1px solid rgba(255, 59, 92, 0.3);
+            color: var(--red);
+            padding: 6px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .btn-danger:hover {
+            background: linear-gradient(135deg, rgba(255, 59, 92, 0.3), rgba(255, 59, 92, 0.2));
+            box-shadow: 0 0 12px rgba(255, 59, 92, 0.2);
+        }
+
+        /* P&L Colors */
+        .pnl-pos { color: var(--green); }
+        .pnl-neg { color: var(--red); }
+
+        /* Fear & Greed */
+        .fg-extreme-fear { color: var(--red); }
+        .fg-fear { color: var(--orange); }
+        .fg-neutral { color: var(--gold); }
+        .fg-greed { color: var(--green); }
+        .fg-extreme-greed { color: var(--cyan); }
+
+        /* Tables */
         table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; padding: 10px 12px; color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #2a2d3a; }
-        td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #1e2130; }
-        tr:hover td { background: #1e2130; }
+        th {
+            text-align: left;
+            padding: 10px 12px;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border-bottom: 1px solid var(--border);
+        }
+        td {
+            padding: 10px 12px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+        tr:hover td { background: rgba(0, 240, 255, 0.03); }
+
+        /* Pulsing Animation */
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .pulse { animation: pulse-glow 2s ease-in-out infinite; }
+
+        /* Progress bar for trailing stop */
+        .progress-track {
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        .progress-marker {
+            position: absolute;
+            top: -3px;
+            width: 3px;
+            height: 14px;
+            border-radius: 1.5px;
+            transform: translateX(-50%);
+        }
+
+        /* Accordion */
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        .accordion-content.open {
+            max-height: 500px;
+        }
     </style>
     {% block head %}{% endblock %}
 </head>
 <body class="min-h-screen">
     <!-- Navigation -->
-    <nav class="border-b border-[#2a2d3a] px-6 py-4">
+    <nav class="scanline-header border-b px-6 py-4" style="border-color: var(--border);">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <span class="text-xl font-bold text-white">Stock Scanner</span>
+            <div class="flex items-center gap-3">
+                <div class="w-2 h-2 rounded-full pulse" style="background: var(--cyan); box-shadow: 0 0 8px var(--cyan);"></div>
+                <span class="text-xl font-bold" style="color: var(--cyan);">Stock Scanner</span>
             </div>
             <div class="flex gap-6">
                 <a href="/" class="nav-link {% if active_page == 'signals' %}active{% endif %}">Signale</a>

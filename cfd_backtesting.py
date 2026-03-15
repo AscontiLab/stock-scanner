@@ -492,6 +492,118 @@ def cli_resolve():
     resolve_signals()
 
 
+def cli_import_historical():
+    """Importiert historische CFD-Signale aus output/YYYY-MM-DD/cfd_setups.csv."""
+    import csv
+
+    init_db()
+    scanner_dir = Path(__file__).parent
+    output_dir = scanner_dir / "output"
+
+    if not output_dir.exists():
+        print("Kein output/ Verzeichnis gefunden.")
+        return
+
+    conn = _get_conn()
+    imported = 0
+    skipped = 0
+
+    # Alle Datum-Verzeichnisse durchgehen
+    date_dirs = sorted(d for d in output_dir.iterdir() if d.is_dir())
+    for date_dir in date_dirs:
+        scan_date = date_dir.name
+        csv_path = date_dir / "cfd_setups.csv"
+        if not csv_path.exists():
+            continue
+
+        # Pruefen ob fuer dieses Datum schon Signale existieren
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM cfd_scan_runs WHERE scan_date = ?", (scan_date,)
+        ).fetchone()[0]
+        if existing > 0:
+            skipped += 1
+            continue
+
+        # CSV lesen
+        with open(csv_path, encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+
+        if not rows:
+            continue
+
+        long_rows = [r for r in rows if r.get("cfd_direction") == "long"]
+        short_rows = [r for r in rows if r.get("cfd_direction") == "short"]
+
+        # Scan-Run anlegen (F&G aus DB falls vorhanden, sonst 50)
+        run_id = log_scan_run(
+            scan_date=scan_date,
+            fear_greed=50,
+            ticker_count=0,
+            long_signals=len(long_rows),
+            short_signals=len(short_rows),
+        )
+
+        for row in long_rows:
+            try:
+                _import_signal_row(conn, run_id, row, "long")
+                imported += 1
+            except Exception as e:
+                print(f"  Fehler bei {row.get('ticker', '?')}: {e}")
+
+        for row in short_rows:
+            try:
+                _import_signal_row(conn, run_id, row, "short")
+                imported += 1
+            except Exception as e:
+                print(f"  Fehler bei {row.get('ticker', '?')}: {e}")
+
+        print(f"  {scan_date}: {len(long_rows)} Long + {len(short_rows)} Short importiert")
+
+    conn.close()
+    print(f"\nImport abgeschlossen: {imported} Signale importiert, {skipped} Tage uebersprungen (bereits vorhanden).")
+    print("Jetzt 'python3 cfd_backtesting.py resolve' ausfuehren, um die Signale aufzuloesen.")
+
+
+def _import_signal_row(conn, run_id, row, direction):
+    """Importiert eine einzelne Signal-Zeile aus einer historischen CSV."""
+    score_key = f"cfd_{direction}_score"
+    quality = float(row.get("cfd_quality_score", row.get(score_key, 0)))
+
+    if direction == "long":
+        stop = float(row["stop_long"])
+        tp1 = float(row["tp1_long"])
+        tp2 = float(row["tp2_long"])
+    else:
+        stop = float(row["stop_short"])
+        tp1 = float(row["tp1_short"])
+        tp2 = float(row["tp2_short"])
+
+    def _float(val, default=None):
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return default
+
+    conn.execute(
+        """INSERT INTO cfd_signals
+           (run_id, ticker, market, direction, quality_score,
+            adx, plus_di, minus_di, rsi, vol_ratio, atr_pct,
+            trend_days, recent_max_gap,
+            entry_price, stop_price, tp1_price, tp2_price,
+            indicators_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (run_id, row["ticker"], row.get("market", ""),
+         direction, quality,
+         _float(row.get("adx")), _float(row.get("plus_di")), _float(row.get("minus_di")),
+         _float(row.get("rsi")), _float(row.get("vol_ratio")), _float(row.get("atr_pct")),
+         int(float(row.get(f"trend_{direction}_days", 0) or 0)),
+         _float(row.get("recent_max_gap")),
+         float(row["price"]), stop, tp1, tp2,
+         json.dumps({})),
+    )
+    conn.commit()
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "summary"
     if cmd == "summary":
@@ -500,6 +612,8 @@ if __name__ == "__main__":
         cli_open()
     elif cmd == "resolve":
         cli_resolve()
+    elif cmd == "import":
+        cli_import_historical()
     else:
         print(f"Unbekannter Befehl: {cmd}")
-        print("Verwendung: python3 cfd_backtesting.py [summary|open|resolve]")
+        print("Verwendung: python3 cfd_backtesting.py [summary|open|resolve|import]")

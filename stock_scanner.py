@@ -34,7 +34,7 @@ _DEFAULT_CONFIG = {
         "trend_maturity_min_days": 3,
         "vol_ratio_min": 1.2, "vol_ratio_bonus": 2.0,
         "max_gap_pct": 5.0,
-        "atr_stop_mult": 1.5, "atr_tp1_mult": 1.5, "atr_tp2_mult": 4.0,
+        "atr_stop_mult": 1.5, "atr_tp1_mult": 1.5, "atr_tp2_mult": 3.0,
         "top_n": 10,
     },
     "scoring": {

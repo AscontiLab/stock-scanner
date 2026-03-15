@@ -31,7 +31,7 @@ cfd:
   # ATR-Multiplikatoren fuer Stop/TP
   atr_stop_mult: 1.5
   atr_tp1_mult: 1.5
-  atr_tp2_mult: 4.0
+  atr_tp2_mult: 3.0          # gesenkt von 4.0 — kein TP2 bei 5 Signalen erreicht
 
   # Top-N Cap pro Richtung
   top_n: 10

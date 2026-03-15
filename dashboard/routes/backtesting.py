@@ -80,6 +80,29 @@ def _get_stats() -> dict:
         "WHERE outcome IS NOT NULL GROUP BY outcome ORDER BY cnt DESC"
     )
 
+    # Nach Score-Bereich
+    by_score_range = _query(
+        """SELECT
+            CASE
+                WHEN quality_score >= 8 THEN '8.0+'
+                WHEN quality_score >= 7 THEN '7.0-7.9'
+                WHEN quality_score >= 6 THEN '6.0-6.9'
+                WHEN quality_score >= 5 THEN '5.0-5.9'
+                ELSE '<5.0'
+            END as range_label,
+            COUNT(*) as cnt,
+            SUM(CASE WHEN outcome IN ('tp1','tp2') THEN 1 ELSE 0 END) as wins,
+            SUM(CASE WHEN outcome IN ('tp1','tp2') THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as win_pct,
+            AVG(pnl_r) as avg_r,
+            SUM(pnl_r) as total_r
+        FROM cfd_signals WHERE outcome IS NOT NULL
+        GROUP BY range_label
+        ORDER BY range_label DESC"""
+    )
+    # Rename key for template
+    for row in by_score_range:
+        row["range"] = row.pop("range_label")
+
     # Letzte 20 aufgeloeste Signale
     recent = _query(
         "SELECT ticker, market, direction, quality_score, entry_price, "
@@ -98,6 +121,7 @@ def _get_stats() -> dict:
         "total_r": round(total_r, 2),
         "by_direction": by_direction,
         "by_market": by_market,
+        "by_score_range": by_score_range,
         "outcomes": outcomes,
         "recent": recent,
     }

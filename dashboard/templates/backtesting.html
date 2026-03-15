@@ -3,36 +3,58 @@
 {% block title %}Backtesting — Stock Scanner{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl font-bold mb-6">Backtesting</h1>
+<h1 class="text-2xl font-bold mb-6" style="color: var(--cyan);">Backtesting</h1>
 
 <!-- Uebersicht-Karten -->
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="card p-5 text-center">
-        <div class="text-3xl font-bold text-white">{{ total }}</div>
-        <div class="text-xs text-gray-500 mt-1">Signale gesamt</div>
+        <div class="text-3xl font-bold mono text-white">{{ total }}</div>
+        <div class="text-xs mt-1" style="color: var(--text-dim);">Signale gesamt</div>
     </div>
     <div class="card p-5 text-center">
-        <div class="text-3xl font-bold {{ 'pnl-pos' if win_rate >= 50 else 'pnl-neg' }}">{{ win_rate }}%</div>
-        <div class="text-xs text-gray-500 mt-1">Win-Rate ({{ wins }}/{{ resolved }})</div>
+        <div class="text-3xl font-bold mono {{ 'pnl-pos' if win_rate >= 50 else 'pnl-neg' }}">{{ win_rate }}%</div>
+        <div class="text-xs mt-1" style="color: var(--text-dim);">Win-Rate ({{ wins }}/{{ resolved }})</div>
     </div>
     <div class="card p-5 text-center">
-        <div class="text-3xl font-bold {{ 'pnl-pos' if avg_r >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(avg_r) }}R</div>
-        <div class="text-xs text-gray-500 mt-1">Avg R</div>
+        <div class="text-3xl font-bold mono {{ 'pnl-pos' if avg_r >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(avg_r) }}R</div>
+        <div class="text-xs mt-1" style="color: var(--text-dim);">Avg R</div>
     </div>
     <div class="card p-5 text-center">
-        <div class="text-3xl font-bold {{ 'pnl-pos' if total_r >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(total_r) }}R</div>
-        <div class="text-xs text-gray-500 mt-1">Total R</div>
+        <div class="text-3xl font-bold mono {{ 'pnl-pos' if total_r >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(total_r) }}R</div>
+        <div class="text-xs mt-1" style="color: var(--text-dim);">Total R</div>
     </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+<!-- Score-Performance + Richtung + Outcomes -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <!-- Nach Score-Bereich -->
+    <div class="card p-5">
+        <h2 class="text-lg font-semibold mb-4" style="color: var(--gold);">Nach Score-Bereich</h2>
+        {% if by_score_range %}
+        <div class="space-y-3">
+            {% for s in by_score_range %}
+            <div class="flex items-center justify-between">
+                <span class="text-sm mono font-medium" style="color: var(--cyan);">{{ s.range }}</span>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs" style="color: var(--text-dim);">{{ s.cnt }} Sig.</span>
+                    <span class="text-sm mono font-semibold {{ 'pnl-pos' if (s.win_pct or 0) >= 50 else 'pnl-neg' }}">{{ "%.0f"|format(s.win_pct or 0) }}%</span>
+                    <span class="text-sm mono {{ 'pnl-pos' if (s.avg_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(s.avg_r or 0) }}R</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm" style="color: var(--text-dim);">Keine Daten.</p>
+        {% endif %}
+    </div>
+
     <!-- Nach Richtung -->
     <div class="card p-5">
-        <h2 class="text-lg font-semibold mb-4">Nach Richtung</h2>
+        <h2 class="text-lg font-semibold mb-4" style="color: var(--gold);">Nach Richtung</h2>
         {% if by_direction %}
         <table>
             <thead>
-                <tr><th>Richtung</th><th>Signale</th><th>Wins</th><th>Win%</th><th>Avg R</th><th>Total R</th></tr>
+                <tr><th>Richtung</th><th>Sig.</th><th>Win%</th><th>Avg R</th></tr>
             </thead>
             <tbody>
                 {% for d in by_direction %}
@@ -44,47 +66,47 @@
                         <span class="badge-short px-2 py-1 rounded text-xs font-bold">SHORT</span>
                         {% endif %}
                     </td>
-                    <td>{{ d.cnt }}</td>
-                    <td>{{ d.wins }}</td>
-                    <td>{{ "%.0f"|format(d.wins / d.cnt * 100 if d.cnt > 0 else 0) }}%</td>
-                    <td class="{{ 'pnl-pos' if (d.avg_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(d.avg_r or 0) }}R</td>
-                    <td class="{{ 'pnl-pos' if (d.total_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(d.total_r or 0) }}R</td>
+                    <td class="mono">{{ d.cnt }}</td>
+                    <td class="mono {{ 'pnl-pos' if d.cnt > 0 and (d.wins / d.cnt * 100) >= 50 else 'pnl-neg' }}">{{ "%.0f"|format(d.wins / d.cnt * 100 if d.cnt > 0 else 0) }}%</td>
+                    <td class="mono {{ 'pnl-pos' if (d.avg_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(d.avg_r or 0) }}R</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <p class="text-gray-500 text-sm">Keine Daten.</p>
+        <p class="text-sm" style="color: var(--text-dim);">Keine Daten.</p>
         {% endif %}
     </div>
 
     <!-- Outcome-Verteilung -->
     <div class="card p-5">
-        <h2 class="text-lg font-semibold mb-4">Outcomes</h2>
+        <h2 class="text-lg font-semibold mb-4" style="color: var(--gold);">Outcomes</h2>
         {% if outcomes %}
         <div class="space-y-3">
             {% for o in outcomes %}
             <div class="flex items-center justify-between">
-                <span class="text-sm font-medium
-                    {% if o.outcome == 'tp2' %}text-green-400
-                    {% elif o.outcome == 'tp1' %}text-green-300
-                    {% elif o.outcome == 'stop' %}text-red-400
-                    {% else %}text-gray-400{% endif %}">
+                <span class="text-sm mono font-medium
+                    {% if o.outcome == 'tp2' %}pnl-pos
+                    {% elif o.outcome == 'tp1' %}pnl-pos
+                    {% elif o.outcome == 'stop' %}pnl-neg
+                    {% else %}{% endif %}"
+                    {% if o.outcome not in ['tp1', 'tp2', 'stop'] %}style="color: var(--text-dim);"{% endif %}>
                     {{ o.outcome|upper }}
                 </span>
                 <div class="flex items-center gap-2">
-                    <div class="w-32 score-bar">
+                    <div class="w-24 score-bar">
                         <div class="score-fill
-                            {% if o.outcome in ['tp1','tp2'] %}bg-green-500{% elif o.outcome == 'stop' %}bg-red-500{% else %}bg-gray-500{% endif %}"
+                            {% if o.outcome in ['tp1','tp2'] %}score-fill-gradient-green{% elif o.outcome == 'stop' %}score-fill-gradient-red{% else %}{% endif %}"
+                            {% if o.outcome not in ['tp1','tp2','stop'] %}style="background: var(--text-dim);"{% endif %}
                             style="width: {{ (o.cnt / resolved * 100 if resolved > 0 else 0)|int }}%"></div>
                     </div>
-                    <span class="text-sm text-gray-400 w-8 text-right">{{ o.cnt }}</span>
+                    <span class="text-sm mono w-8 text-right" style="color: var(--text-muted);">{{ o.cnt }}</span>
                 </div>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-gray-500 text-sm">Keine Daten.</p>
+        <p class="text-sm" style="color: var(--text-dim);">Keine Daten.</p>
         {% endif %}
     </div>
 </div>
@@ -92,7 +114,7 @@
 <!-- Nach Markt -->
 {% if by_market %}
 <div class="card p-5 mb-6">
-    <h2 class="text-lg font-semibold mb-4">Nach Markt</h2>
+    <h2 class="text-lg font-semibold mb-4" style="color: var(--gold);">Nach Markt</h2>
     <div class="overflow-x-auto">
         <table>
             <thead>
@@ -102,11 +124,11 @@
                 {% for m in by_market %}
                 <tr>
                     <td class="font-semibold text-white">{{ m.market }}</td>
-                    <td>{{ m.cnt }}</td>
-                    <td>{{ m.wins }}</td>
-                    <td>{{ "%.0f"|format(m.wins / m.cnt * 100 if m.cnt > 0 else 0) }}%</td>
-                    <td class="{{ 'pnl-pos' if (m.avg_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(m.avg_r or 0) }}R</td>
-                    <td class="{{ 'pnl-pos' if (m.total_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(m.total_r or 0) }}R</td>
+                    <td class="mono">{{ m.cnt }}</td>
+                    <td class="mono">{{ m.wins }}</td>
+                    <td class="mono {{ 'pnl-pos' if m.cnt > 0 and (m.wins / m.cnt * 100) >= 50 else 'pnl-neg' }}">{{ "%.0f"|format(m.wins / m.cnt * 100 if m.cnt > 0 else 0) }}%</td>
+                    <td class="mono {{ 'pnl-pos' if (m.avg_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(m.avg_r or 0) }}R</td>
+                    <td class="mono {{ 'pnl-pos' if (m.total_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(m.total_r or 0) }}R</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -115,10 +137,18 @@
 </div>
 {% endif %}
 
+<!-- MFE/MAE Scatter (Canvas) -->
+{% if recent %}
+<div class="card p-5 mb-6">
+    <h2 class="text-lg font-semibold mb-4" style="color: var(--gold);">MFE vs. MAE Scatter</h2>
+    <canvas id="mfeMaeChart" height="200"></canvas>
+</div>
+{% endif %}
+
 <!-- Letzte 20 aufgeloeste Signale -->
 {% if recent %}
 <div class="card p-5">
-    <h2 class="text-lg font-semibold mb-4">Letzte aufgeloeste Signale</h2>
+    <h2 class="text-lg font-semibold mb-4" style="color: var(--gold);">Letzte aufgeloeste Signale</h2>
     <div class="overflow-x-auto">
         <table>
             <thead>
@@ -131,8 +161,8 @@
                     <th>Outcome</th>
                     <th>Tag</th>
                     <th>P&L (R)</th>
-                    <th>Max Fav</th>
-                    <th>Max Adv</th>
+                    <th>MFE</th>
+                    <th>MAE</th>
                 </tr>
             </thead>
             <tbody>
@@ -146,22 +176,23 @@
                         <span class="badge-short px-2 py-0.5 rounded text-xs">SHORT</span>
                         {% endif %}
                     </td>
-                    <td>{{ "%.1f"|format(s.quality_score) }}</td>
-                    <td>{{ "%.2f"|format(s.entry_price) }}</td>
-                    <td>{{ "%.2f"|format(s.exit_price) if s.exit_price else "-" }}</td>
-                    <td class="font-semibold
-                        {% if s.outcome == 'tp2' %}text-green-400
-                        {% elif s.outcome == 'tp1' %}text-green-300
-                        {% elif s.outcome == 'stop' %}text-red-400
-                        {% else %}text-gray-400{% endif %}">
+                    <td class="mono">{{ "%.1f"|format(s.quality_score) }}</td>
+                    <td class="mono">{{ "%.2f"|format(s.entry_price) }}</td>
+                    <td class="mono">{{ "%.2f"|format(s.exit_price) if s.exit_price else "-" }}</td>
+                    <td class="font-semibold mono
+                        {% if s.outcome == 'tp2' %}pnl-pos
+                        {% elif s.outcome == 'tp1' %}pnl-pos
+                        {% elif s.outcome == 'stop' %}pnl-neg
+                        {% else %}{% endif %}"
+                        {% if s.outcome not in ['tp1', 'tp2', 'stop'] %}style="color: var(--text-dim);"{% endif %}>
                         {{ s.outcome|upper }}
                     </td>
-                    <td>{{ s.outcome_day if s.outcome_day else "-" }}</td>
-                    <td class="{{ 'pnl-pos' if (s.pnl_r or 0) >= 0 else 'pnl-neg' }} font-semibold">
+                    <td class="mono">{{ s.outcome_day if s.outcome_day else "-" }}</td>
+                    <td class="mono font-semibold {{ 'pnl-pos' if (s.pnl_r or 0) >= 0 else 'pnl-neg' }}">
                         {{ "%.2f"|format(s.pnl_r) if s.pnl_r is not none else "-" }}R
                     </td>
-                    <td class="text-green-400">{{ "%.2f"|format(s.max_favorable) if s.max_favorable else "-" }}</td>
-                    <td class="text-red-400">{{ "%.2f"|format(s.max_adverse) if s.max_adverse else "-" }}</td>
+                    <td class="mono pnl-pos">{{ "%.2f"|format(s.max_favorable) if s.max_favorable else "-" }}</td>
+                    <td class="mono pnl-neg">{{ "%.2f"|format(s.max_adverse) if s.max_adverse else "-" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -172,9 +203,109 @@
 
 {% if total == 0 %}
 <div class="card p-12 text-center">
-    <p class="text-gray-500 text-lg">Noch keine Backtesting-Daten.</p>
-    <p class="text-gray-600 text-sm mt-2">Daten werden nach dem naechsten Scanner-Lauf verfuegbar.</p>
+    <p class="text-lg" style="color: var(--text-muted);">Noch keine Backtesting-Daten.</p>
+    <p class="text-sm mt-2" style="color: var(--text-dim);">Daten werden nach dem naechsten Scanner-Lauf verfuegbar.</p>
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+{% if recent %}
+<script>
+// MFE vs MAE Scatter Chart (pure Canvas)
+document.addEventListener('DOMContentLoaded', function() {
+    const canvas = document.getElementById('mfeMaeChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * 2;
+    canvas.height = 400;
+    canvas.style.height = '200px';
+    ctx.scale(2, 2);
+
+    const w = rect.width;
+    const h = 200;
+    const pad = { top: 20, right: 20, bottom: 35, left: 45 };
+    const pw = w - pad.left - pad.right;
+    const ph = h - pad.top - pad.bottom;
+
+    const data = [
+        {% for s in recent %}
+        {% if s.max_favorable is not none and s.max_adverse is not none %}
+        { mfe: {{ s.max_favorable }}, mae: {{ s.max_adverse }}, outcome: '{{ s.outcome }}', ticker: '{{ s.ticker }}' },
+        {% endif %}
+        {% endfor %}
+    ];
+
+    if (data.length === 0) return;
+
+    const maxMfe = Math.max(...data.map(d => d.mfe), 2);
+    const maxMae = Math.max(...data.map(d => d.mae), 2);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= 4; i++) {
+        const x = pad.left + (pw / 4) * i;
+        const y = pad.top + (ph / 4) * i;
+        ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, h - pad.bottom); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
+    }
+
+    // Axes labels
+    ctx.fillStyle = '#64748b';
+    ctx.font = '10px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText('MAE (R)', w / 2, h - 5);
+    ctx.save();
+    ctx.translate(12, h / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('MFE (R)', 0, 0);
+    ctx.restore();
+
+    // Tick labels
+    for (let i = 0; i <= 4; i++) {
+        const xVal = (maxMae / 4 * i).toFixed(1);
+        const yVal = (maxMfe / 4 * (4 - i)).toFixed(1);
+        ctx.fillText(xVal, pad.left + (pw / 4) * i, h - pad.bottom + 14);
+        ctx.textAlign = 'right';
+        ctx.fillText(yVal, pad.left - 6, pad.top + (ph / 4) * i + 4);
+        ctx.textAlign = 'center';
+    }
+
+    // Points
+    const colors = { tp2: '#00ff88', tp1: '#c8aa6e', stop: '#ff3b5c', expired: '#64748b' };
+    data.forEach(d => {
+        const x = pad.left + (d.mae / maxMae) * pw;
+        const y = pad.top + (1 - d.mfe / maxMfe) * ph;
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = colors[d.outcome] || '#64748b';
+        ctx.globalAlpha = 0.8;
+        ctx.fill();
+        ctx.globalAlpha = 0.3;
+        ctx.beginPath();
+        ctx.arc(x, y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    });
+
+    // Legend
+    const legend = [['TP2', '#00ff88'], ['TP1', '#c8aa6e'], ['STOP', '#ff3b5c'], ['Expired', '#64748b']];
+    let lx = w - pad.right - 200;
+    legend.forEach(([label, color]) => {
+        ctx.beginPath();
+        ctx.arc(lx, pad.top + 5, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '10px Inter';
+        ctx.textAlign = 'left';
+        ctx.fillText(label, lx + 8, pad.top + 9);
+        lx += 50;
+    });
+});
+</script>
+{% endif %}
 {% endblock %}
