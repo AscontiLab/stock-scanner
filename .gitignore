@@ -9,3 +9,7 @@ __pycache__/
 *.db
 *.lock
 .env
+
+# Backup-Dumps explizit tracken
+!backup/
+!backup/*.sql
