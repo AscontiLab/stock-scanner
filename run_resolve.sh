@@ -22,7 +22,11 @@ python3 cfd_backtesting.py resolve 2>&1 | tee -a "$LOG_FILE"
 echo "--- Portfolio Check ---" | tee -a "$LOG_FILE"
 python3 cfd_portfolio.py check 2>&1 | tee -a "$LOG_FILE"
 
-# 3. Telegram Summary
+# 3. Dashboard-Daten an n8n pushen (Portfolio + Backtesting)
+echo "--- Dashboard Update ---" | tee -a "$LOG_FILE"
+python3 write_dashboard_data.py 2>&1 | tee -a "$LOG_FILE"
+
+# 4. Telegram Summary
 python3 -c "
 from datetime import date
 from telegram_alerts import send_message
