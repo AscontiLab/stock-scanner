@@ -961,15 +961,12 @@ def score_color(score: int, direction: str) -> str:
 def signal_badge(text: str) -> str:
     text_lower = text.lower()
     if "buy" in text_lower or "bull" in text_lower or "hammer" in text_lower or "morning" in text_lower:
-        color = "#27ae60"
+        cls = "badge badge-buy"
     elif "sell" in text_lower or "bear" in text_lower or "shooting" in text_lower or "evening" in text_lower:
-        color = "#e74c3c"
+        cls = "badge badge-sell"
     else:
-        color = "#7f8c8d"
-    return (
-        f'<span style="background:{color};color:white;padding:2px 6px;'
-        f'border-radius:4px;font-size:0.78em;white-space:nowrap">{text}</span>'
-    )
+        cls = "badge badge-neutral"
+    return f'<span class="{cls}">{text}</span>'
 
 
 def build_row(row: dict, direction: str) -> str:
@@ -983,21 +980,21 @@ def build_row(row: dict, direction: str) -> str:
     pct_str = f'<span style="color:{pct_color}">{pct:+.2f}%</span>'
 
     cells = [
-        f'<td style="font-weight:bold">{row["ticker"]}</td>',
+        f'<td class="bold">{row["ticker"]}</td>',
         f'<td>{row["name"]}</td>',
         f'<td>{row["market"]}</td>',
-        f'<td style="font-weight:bold;text-align:center">{score_text}</td>',
-        f'<td style="text-align:center">{strength}</td>',
-        f'<td style="text-align:center">{row["rsi"]}</td>',
-        f'<td style="text-align:center">{signal_badge(row["macd"])}</td>',
-        f'<td style="text-align:center">{signal_badge(row["ma"])}</td>',
-        f'<td style="text-align:center">{signal_badge(row["bollinger"])}</td>',
-        f'<td style="text-align:center">{signal_badge(row["volume"])}</td>',
-        f'<td style="text-align:center">{signal_badge(row["candlestick"])}</td>',
-        f'<td style="text-align:center">{signal_badge(row.get("vwap", "-"))}</td>',
-        f'<td style="text-align:center">{signal_badge(row.get("squeeze", "-"))}</td>',
-        f'<td style="text-align:right">{row["price"]}</td>',
-        f'<td style="text-align:right">{pct_str}</td>',
+        f'<td class="bold tc">{score_text}</td>',
+        f'<td class="tc">{strength}</td>',
+        f'<td class="tc">{row["rsi"]}</td>',
+        f'<td class="tc">{signal_badge(row["macd"])}</td>',
+        f'<td class="tc">{signal_badge(row["ma"])}</td>',
+        f'<td class="tc">{signal_badge(row["bollinger"])}</td>',
+        f'<td class="tc">{signal_badge(row["volume"])}</td>',
+        f'<td class="tc">{signal_badge(row["candlestick"])}</td>',
+        f'<td class="tc">{signal_badge(row.get("vwap", "-"))}</td>',
+        f'<td class="tc">{signal_badge(row.get("squeeze", "-"))}</td>',
+        f'<td class="tr">{row["price"]}</td>',
+        f'<td class="tr">{pct_str}</td>',
     ]
     cells_html = "\n".join(cells)
     return f'<tr style="background:{bg}">\n{cells_html}\n</tr>'
@@ -1012,16 +1009,16 @@ TABLE_HEADERS = [
 def build_table(rows: list, direction: str, title: str) -> str:
     emoji = "🟢" if direction == "buy" else "🔴"
     header_cells = "".join(
-        f'<th style="padding:8px 12px;text-align:left">{h}</th>'
+        f'<th scope="col">{h}</th>'
         for h in TABLE_HEADERS
     )
     body_rows = "\n".join(build_row(r, direction) for r in rows)
     return f"""
-<h2 style="margin-top:2rem">{emoji} {title} ({len(rows)} Signale)</h2>
-<div style="overflow-x:auto">
-<table style="width:100%;border-collapse:collapse;font-size:0.88em">
+<h2 class="section-title">{emoji} {title} ({len(rows)} Signale)</h2>
+<div class="table-wrap">
+<table>
   <thead>
-    <tr style="background:#2c3e50;color:white">
+    <tr class="hdr">
       {header_cells}
     </tr>
   </thead>
@@ -1061,12 +1058,12 @@ def build_summary(buy_rows: list, sell_rows: list, scan_time: str) -> str:
         </p>
         """
     return f"""
-<div style="background:#ecf0f1;padding:1.5rem;border-radius:8px;margin-bottom:1.5rem">
-  <h2 style="margin-top:0">Zusammenfassung</h2>
+<div class="summary">
+  <h2>Zusammenfassung</h2>
   <p>
     <b>Scan-Zeitpunkt:</b> {scan_time} &nbsp;|&nbsp;
-    <b>Kaufsignale:</b> <span style="color:#27ae60;font-weight:bold">{len(buy_rows)}</span> &nbsp;|&nbsp;
-    <b>Verkaufsignale:</b> <span style="color:#e74c3c;font-weight:bold">{len(sell_rows)}</span> &nbsp;|&nbsp;
+    <b>Kaufsignale:</b> <span class="c-green bold">{len(buy_rows)}</span> &nbsp;|&nbsp;
+    <b>Verkaufsignale:</b> <span class="c-red bold">{len(sell_rows)}</span> &nbsp;|&nbsp;
     <b>&#216; Score:</b> {avg_score}
   </p>
   {strongest_html}
@@ -1085,10 +1082,10 @@ def build_cfd_row(row: dict, direction: str) -> str:
     score = row[f"cfd_{direction}_score"]
     if direction == "long":
         stop, tp1, tp2 = row["stop_long"], row["tp1_long"], row["tp2_long"]
-        dir_color, dir_label, bg = "#1a7a3a", "LONG ▲", "#eafaf1"
+        pill_cls, dir_label, bg = "pill pill-long", "LONG ▲", "#eafaf1"
     else:
         stop, tp1, tp2 = row["stop_short"], row["tp1_short"], row["tp2_short"]
-        dir_color, dir_label, bg = "#c0392b", "SHORT ▼", "#fdedec"
+        pill_cls, dir_label, bg = "pill pill-short", "SHORT ▼", "#fdedec"
 
     price  = row["price"]
     risk   = abs(price - stop)
@@ -1096,34 +1093,33 @@ def build_cfd_row(row: dict, direction: str) -> str:
     rr     = reward / risk if risk > 0 else 0
 
     max_s = CFG["scoring"]["max_score"]
-    score_color = "#1e8449" if score >= 7.0 else "#27ae60" if score >= 6.0 else "#d68910" if score >= 5.0 else "#7f8c8d"
+    score_cls = "c-score-best" if score >= 7.0 else "c-score-good" if score >= 6.0 else "c-score-mid" if score >= 5.0 else "c-muted"
     score_display = f"{score:.1f}/{max_s:.0f}"
     gap_html = (
-        f'<span style="color:#e74c3c;font-weight:bold">{row["recent_max_gap"]}% ⚠</span>'
+        f'<span class="c-red bold">{row["recent_max_gap"]}% ⚠</span>'
         if row["recent_max_gap"] >= 5
-        else f'<span style="color:#f39c12">{row["recent_max_gap"]}%</span>'
+        else f'<span class="c-warn">{row["recent_max_gap"]}%</span>'
         if row["recent_max_gap"] >= 3
         else f'{row["recent_max_gap"]}%'
     )
     di_info = f'+DI={row.get("plus_di", "?")}/−DI={row.get("minus_di", "?")}'
     ticker_esc = row["ticker"].replace("'", "\\'")
     cells = "".join([
-        f'<td style="font-weight:bold">{row["ticker"]}</td>',
-        f'<td style="font-size:0.85em">{row["market"]}</td>',
-        f'<td style="text-align:center;font-weight:bold;color:{score_color}">{score_display}</td>',
-        f'<td style="text-align:center"><span style="background:{dir_color};color:white;'
-        f'padding:2px 8px;border-radius:4px;font-size:0.85em">{dir_label}</span></td>',
-        f'<td style="text-align:center" title="{di_info}">{row["adx"]}</td>',
-        f'<td style="text-align:center">{row["rsi"]}</td>',
-        f'<td style="text-align:right">{price}</td>',
-        f'<td style="text-align:right;color:#e74c3c">{stop}</td>',
-        f'<td style="text-align:right;color:#27ae60">{tp1}</td>',
-        f'<td style="text-align:right;color:#27ae60;font-weight:bold">{tp2}</td>',
-        f'<td style="text-align:center;font-weight:bold">{rr:.1f}:1</td>',
-        f'<td style="text-align:center">{row["atr_pct"]}%</td>',
-        f'<td style="text-align:center">{gap_html}</td>',
-        f'<td style="text-align:center">{row.get("rvol_label", "—")}</td>',
-        f'<td style="text-align:center">'
+        f'<td class="bold">{row["ticker"]}</td>',
+        f'<td class="sm">{row["market"]}</td>',
+        f'<td class="tc bold {score_cls}">{score_display}</td>',
+        f'<td class="tc"><span class="{pill_cls}">{dir_label}</span></td>',
+        f'<td class="tc" title="{di_info}">{row["adx"]}</td>',
+        f'<td class="tc">{row["rsi"]}</td>',
+        f'<td class="tr">{price}</td>',
+        f'<td class="tr c-red">{stop}</td>',
+        f'<td class="tr c-green">{tp1}</td>',
+        f'<td class="tr c-green bold">{tp2}</td>',
+        f'<td class="tc bold">{rr:.1f}:1</td>',
+        f'<td class="tc">{row["atr_pct"]}%</td>',
+        f'<td class="tc">{gap_html}</td>',
+        f'<td class="tc">{row.get("rvol_label", "—")}</td>',
+        f'<td class="tc">'
         f'<button onclick="addPosition(\'{ticker_esc}\', \'{direction}\')" '
         f'class="btn-add" title="Position übernehmen">+</button></td>',
     ])
@@ -1132,7 +1128,7 @@ def build_cfd_row(row: dict, direction: str) -> str:
 
 def build_cfd_table(cfd_long: list, cfd_short: list) -> str:
     header_cells = "".join(
-        f'<th style="padding:8px 12px;text-align:left">{h}</th>'
+        f'<th scope="col">{h}</th>'
         for h in CFD_HEADERS
     )
     rows = [(r, "long") for r in cfd_long] + [(r, "short") for r in cfd_short]
@@ -1140,18 +1136,18 @@ def build_cfd_table(cfd_long: list, cfd_short: list) -> str:
     body = "\n".join(build_cfd_row(r, d) for r, d in rows)
     total_l, total_s = len(cfd_long), len(cfd_short)
     return f"""
-<h2 style="margin-top:2rem">⚡ CFD SETUPS &nbsp;
-  <span style="color:#27ae60">Long: {total_l}</span> &nbsp;|&nbsp;
-  <span style="color:#e74c3c">Short: {total_s}</span>
+<h2 class="section-title">⚡ CFD SETUPS &nbsp;
+  <span class="c-green">Long: {total_l}</span> &nbsp;|&nbsp;
+  <span class="c-red">Short: {total_s}</span>
 </h2>
-<p style="color:#7f8c8d;font-size:0.83em">
+<p class="c-muted" style="font-size:0.83em">
   Gewichteter Score &ge; {CFG["scoring"]["threshold"]:.0f}/{CFG["scoring"]["max_score"]:.0f} &nbsp;|&nbsp;
   ADX+DI (2.0) · MA-Struktur (1.5) · EMA-Stack (1.5) · MACD (1.0) · RSI-Zone (1.0) · Vol (0.5) · Gap (0.5) + Bonus (2.0)
   &nbsp;|&nbsp; Stop = {CFG["cfd"]["atr_stop_mult"]}×ATR &nbsp;|&nbsp; TP2 = {CFG["cfd"]["atr_tp2_mult"]}×ATR
 </p>
-<div style="overflow-x:auto">
-<table style="width:100%;border-collapse:collapse;font-size:0.88em">
-  <thead><tr style="background:#1a252f;color:white">{header_cells}</tr></thead>
+<div class="table-wrap">
+<table>
+  <thead><tr class="hdr-dark">{header_cells}</tr></thead>
   <tbody>{body}</tbody>
 </table>
 </div>
@@ -1187,15 +1183,15 @@ def build_portfolio_section(reports: list) -> str:
     for r in reports:
         if "error" in r:
             rows_html.append(
-                f'<tr><td style="font-weight:bold">{r["ticker"]}</td>'
-                f'<td colspan="10" style="color:#e74c3c">Fehler: {r["error"]}</td></tr>'
+                f'<tr><td class="bold">{r["ticker"]}</td>'
+                f'<td colspan="10" class="c-red">Fehler: {r["error"]}</td></tr>'
             )
             continue
 
         # Farben
-        dir_color = "#1a7a3a" if r["direction"] == "long" else "#c0392b"
+        pill_cls = "pill pill-long" if r["direction"] == "long" else "pill pill-short"
         dir_label = r["direction"].upper()
-        pnl_color = "#27ae60" if r["pnl_pct"] >= 0 else "#e74c3c"
+        pnl_cls = "c-green" if r["pnl_pct"] >= 0 else "c-red"
         pnl_sign = "+" if r["pnl_pct"] >= 0 else ""
         rec_color = r.get("rec_color", "#7f8c8d")
 
@@ -1204,39 +1200,38 @@ def build_portfolio_section(reports: list) -> str:
         warn_tooltip = " | ".join(warn_list) if warn_list else "Keine Warnungen"
         warn_count = len(warn_list)
         warn_badge = (
-            f'<span style="color:#27ae60" title="{warn_tooltip}">0</span>'
+            f'<span class="c-green" title="{warn_tooltip}">0</span>'
             if warn_count == 0
-            else f'<span style="color:#e67e22" title="{warn_tooltip}">{warn_count}</span>'
+            else f'<span class="c-warn" title="{warn_tooltip}">{warn_count}</span>'
             if warn_count <= 2
-            else f'<span style="color:#e74c3c;font-weight:bold" title="{warn_tooltip}">{warn_count}</span>'
+            else f'<span class="c-red bold" title="{warn_tooltip}">{warn_count}</span>'
         )
 
         # TP1-Hit Badge
-        tp1_badge = ' <span style="color:#27ae60;font-size:0.8em">TP1</span>' if r.get("tp1_hit") else ""
+        tp1_badge = ' <span class="c-green" style="font-size:0.8em">TP1</span>' if r.get("tp1_hit") else ""
 
         # Indikatoren
         ind = r.get("indicators", {})
         ind_html = ""
         if ind:
             ind_html = (
-                f'<span style="font-size:0.75em;color:#7f8c8d">'
+                f'<span class="c-muted" style="font-size:0.75em">'
                 f'ADX {ind.get("adx", "?")} | RSI {ind.get("rsi", "?")} | '
                 f'MACD {ind.get("macd_hist", "?")}</span>'
             )
 
         cells = "".join([
-            f'<td style="font-weight:bold">{r["ticker"]}{tp1_badge}</td>',
-            f'<td style="text-align:center"><span style="background:{dir_color};color:white;'
-            f'padding:2px 8px;border-radius:4px;font-size:0.85em">{dir_label}</span></td>',
-            f'<td style="text-align:right">{r["entry_price"]:.2f}</td>',
-            f'<td style="text-align:right;font-weight:bold">{r["current_price"]:.2f}</td>',
-            f'<td style="text-align:right;color:{pnl_color};font-weight:bold">{pnl_sign}{r["pnl_pct"]:.1f}%</td>',
-            f'<td style="text-align:center">{r["days_held"]}d</td>',
-            f'<td style="text-align:right;color:#e74c3c">{r["stop_current"]:.2f}</td>',
-            f'<td style="text-align:right;color:#27ae60">{r["tp1"]:.2f}</td>',
-            f'<td style="text-align:right;color:#27ae60">{r["tp2"]:.2f}</td>',
-            f'<td style="text-align:center">{warn_badge}</td>',
-            f'<td style="font-weight:bold;color:{rec_color}">{r["recommendation"]}</td>',
+            f'<td class="bold">{r["ticker"]}{tp1_badge}</td>',
+            f'<td class="tc"><span class="{pill_cls}">{dir_label}</span></td>',
+            f'<td class="tr">{r["entry_price"]:.2f}</td>',
+            f'<td class="tr bold">{r["current_price"]:.2f}</td>',
+            f'<td class="tr {pnl_cls} bold">{pnl_sign}{r["pnl_pct"]:.1f}%</td>',
+            f'<td class="tc">{r["days_held"]}d</td>',
+            f'<td class="tr c-red">{r["stop_current"]:.2f}</td>',
+            f'<td class="tr c-green">{r["tp1"]:.2f}</td>',
+            f'<td class="tr c-green">{r["tp2"]:.2f}</td>',
+            f'<td class="tc">{warn_badge}</td>',
+            f'<td class="bold" style="color:{rec_color}">{r["recommendation"]}</td>',
         ])
         rows_html.append(f'<tr>{cells}</tr>')
 
@@ -1244,25 +1239,25 @@ def build_portfolio_section(reports: list) -> str:
         if warn_list:
             warn_details = " &bull; ".join(warn_list)
             rows_html.append(
-                f'<tr style="background:#fef9e7"><td></td>'
-                f'<td colspan="10" style="font-size:0.8em;color:#7f8c8d;padding:2px 10px">'
+                f'<tr class="warn-row"><td></td>'
+                f'<td colspan="10">'
                 f'{warn_details}</td></tr>'
             )
 
     headers = ["Ticker", "Richtung", "Entry", "Aktuell", "P&L", "Tage",
                "Stop", "TP1", "TP2", "Warn.", "Empfehlung"]
     header_cells = "".join(
-        f'<th style="padding:8px 12px;text-align:left">{h}</th>' for h in headers
+        f'<th scope="col">{h}</th>' for h in headers
     )
 
     return f"""
-<h2 style="margin-top:2rem;color:#2c3e50">
+<h2 class="section-title" style="color:#2c3e50">
   Meine CFD-Positionen &nbsp;
-  <span style="font-size:0.7em;color:#7f8c8d">({len(reports)} aktiv)</span>
+  <span class="c-muted" style="font-size:0.7em">({len(reports)} aktiv)</span>
 </h2>
-<div style="overflow-x:auto">
-<table style="width:100%;border-collapse:collapse;font-size:0.88em">
-  <thead><tr style="background:#1a252f;color:white">{header_cells}</tr></thead>
+<div class="table-wrap">
+<table>
+  <thead><tr class="hdr-dark">{header_cells}</tr></thead>
   <tbody>{"".join(rows_html)}</tbody>
 </table>
 </div>
@@ -1288,18 +1283,61 @@ def generate_html(
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trading Signals — {scan_time}</title>
 <style>
   body {{ font-family: Arial, sans-serif; margin: 2rem; background: #f9f9f9; color: #2c3e50 }}
   h1 {{ color: #2c3e50 }}
+  /* Tabellen-Grundlagen */
+  table {{ width: 100%; border-collapse: collapse; font-size: 0.88em }}
   table td, table th {{ border: 1px solid #ddd; padding: 6px 10px }}
   table tr:hover {{ filter: brightness(0.95) }}
+  /* Header-Zeile */
+  .hdr {{ background: #2c3e50; color: white }}
+  .hdr-dark {{ background: #1a252f; color: white }}
+  .hdr th {{ padding: 8px 12px; text-align: left }}
+  /* Zell-Ausrichtung */
+  .tc {{ text-align: center }}
+  .tr {{ text-align: right }}
+  .bold {{ font-weight: bold }}
+  .sm {{ font-size: 0.85em }}
+  .xs {{ font-size: 0.78em }}
+  /* Signal-Badge */
+  .badge {{ color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.78em; white-space: nowrap }}
+  .badge-buy {{ background: #27ae60 }}
+  .badge-sell {{ background: #e74c3c }}
+  .badge-neutral {{ background: #7f8c8d }}
+  /* Richtungs-Pillen */
+  .pill {{ color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em }}
+  .pill-long {{ background: #1a7a3a }}
+  .pill-short {{ background: #c0392b }}
+  /* Farben */
+  .c-green {{ color: #27ae60 }}
+  .c-red {{ color: #e74c3c }}
+  .c-muted {{ color: #7f8c8d }}
+  .c-warn {{ color: #e67e22 }}
+  .c-score-best {{ color: #1e8449 }}
+  .c-score-good {{ color: #27ae60 }}
+  .c-score-mid {{ color: #d68910 }}
+  /* Zusammenfassung */
+  .summary {{ background: #ecf0f1; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem }}
+  .summary h2 {{ margin-top: 0 }}
+  /* Portfolio-Warnzeile */
+  .warn-row {{ background: #fef9e7 }}
+  .warn-row td {{ font-size: 0.8em; color: #7f8c8d; padding: 2px 10px }}
+  /* Disclaimer */
+  .disclaimer {{ color: #aaa; font-size: 0.8em }}
+  .subtitle {{ color: #7f8c8d }}
+  .section-title {{ margin-top: 2rem }}
+  /* Button */
   .btn-add {{
     background: #1a7a3a; color: white; border: none; border-radius: 4px;
     padding: 4px 10px; cursor: pointer; font-weight: bold; font-size: 1em;
   }}
   .btn-add:hover {{ background: #1e8449 }}
   .btn-add:disabled {{ background: #95a5a6; cursor: default }}
+  /* Responsive Tabellen-Wrapper */
+  .table-wrap {{ overflow-x: auto }}
 </style>
 <script>
 function addPosition(ticker, direction) {{
@@ -1326,14 +1364,14 @@ function addPosition(ticker, direction) {{
 </head>
 <body>
 <h1>📊 Technical Analysis Stock Scanner</h1>
-<p style="color:#7f8c8d">Datum: {scan_time} &nbsp;|&nbsp; Signale mit |Score| &ge; 4 &nbsp;|&nbsp; {fg_badge}</p>
+<p class="subtitle">Datum: {scan_time} &nbsp;|&nbsp; Signale mit |Score| &ge; 4 &nbsp;|&nbsp; {fg_badge}</p>
 {portfolio_section}
 {summary}
 {buy_table}
 {sell_table}
 {cfd_section}
 <hr>
-<p style="color:#aaa;font-size:0.8em">
+<p class="disclaimer">
   Nur technische Analyse — keine Anlageberatung. Kurzfristiger Horizont 1–5 Tage.
 </p>
 </body>
