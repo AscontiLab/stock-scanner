@@ -215,6 +215,8 @@ import io
 import json
 import urllib.request
 
+from utils import fg_label as _fg_label
+
 TICKER_SOURCES: dict[str, tuple[str, int]] = {}
 
 
@@ -448,6 +450,14 @@ def compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int =
     return adx, plus_di, minus_di
 
 
+def compute_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """Berechnet Average True Range (ATR)."""
+    tr = pd.concat(
+        [high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1
+    ).max(axis=1)
+    return tr.rolling(period).mean()
+
+
 def detect_candlestick_patterns(df: pd.DataFrame) -> dict:
     """Detect common candlestick patterns on the last two candles."""
     if len(df) < 3:
@@ -546,17 +556,7 @@ def get_fear_greed() -> dict:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             value = round(float(data["fear_and_greed"]["score"]))
-            if value <= 20:
-                label = "Extreme Angst"
-            elif value <= 40:
-                label = "Angst"
-            elif value <= 60:
-                label = "Neutral"
-            elif value <= 80:
-                label = "Gier"
-            else:
-                label = "Extreme Gier"
-            return {"value": value, "label": label}
+            return {"value": value, "label": _fg_label(value)}
     except Exception:
         return {"value": 50, "label": "Neutral (Fallback)"}
 
@@ -585,351 +585,348 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
         df = df.dropna()
         if len(df) < 30:
             return None
-
-        close = df["Close"]
-        volume = df["Volume"]
-        open_ = df["Open"]
-        high = df["High"]
-        low = df["Low"]
-
-        current_price = float(close.iloc[-1])
-        prev_price = float(close.iloc[-2])
-        pct_change = (current_price - prev_price) / prev_price * 100
-
-        # --- Mindest-Liquidität ---
-        avg_vol_20 = float(volume.rolling(20).mean().iloc[-1])
-        if avg_vol_20 < MIN_AVG_VOLUME:
-            return None
-
-        # --- ATR (wird früh benötigt für Squeeze-Keltner) ---
-        tr_s = pd.concat(
-            [high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1
-        ).max(axis=1)
-        atr_series = tr_s.rolling(14).mean()
-        atr_val = float(atr_series.iloc[-1])
-        atr_pct = round(atr_val / current_price * 100, 2)
-
-        buy_signals = 0
-        sell_signals = 0
-        signal_details = {}
-
-        # --- RSI ---
-        rsi = compute_rsi(close)
-        rsi_val = float(rsi.iloc[-1])
-        signal_details["RSI"] = round(rsi_val, 1)
-        if rsi_val < 30:
-            buy_signals += 1
-            signal_details["RSI_signal"] = "BUY"
-        elif rsi_val > 70:
-            sell_signals += 1
-            signal_details["RSI_signal"] = "SELL"
-        else:
-            signal_details["RSI_signal"] = "neutral"
-
-        # --- MACD ---
-        macd_line, signal_line, histogram = compute_macd(close)
-        prev_hist = float(histogram.iloc[-2]) if len(histogram) >= 2 else 0
-        curr_hist = float(histogram.iloc[-1])
-        if prev_hist < 0 and curr_hist > 0:
-            buy_signals += 1
-            macd_signal = "BUY"
-        elif prev_hist > 0 and curr_hist < 0:
-            sell_signals += 1
-            macd_signal = "SELL"
-        elif curr_hist > 0:
-            macd_signal = "bullish"
-        else:
-            macd_signal = "bearish"
-        signal_details["MACD"] = macd_signal
-
-        # --- Moving Averages ---
-        sma20 = close.rolling(20).mean()
-        sma50 = close.rolling(50).mean()
-        ema9 = close.ewm(span=9, adjust=False).mean()
-        ema21 = close.ewm(span=21, adjust=False).mean()
-
-        sma20_val = float(sma20.iloc[-1])
-        sma50_val = float(sma50.iloc[-1])
-        ema9_val = float(ema9.iloc[-1])
-        ema21_val = float(ema21.iloc[-1])
-        ema9_prev = float(ema9.iloc[-2])
-        ema21_prev = float(ema21.iloc[-2])
-
-        ma_buy = current_price > sma20_val > sma50_val
-        ma_sell = current_price < sma20_val < sma50_val
-        ema_cross_buy = ema9_prev < ema21_prev and ema9_val > ema21_val
-        ema_cross_sell = ema9_prev > ema21_prev and ema9_val < ema21_val
-
-        if ma_buy or ema_cross_buy:
-            buy_signals += 1
-            ma_signal = "BUY"
-        elif ma_sell or ema_cross_sell:
-            sell_signals += 1
-            ma_signal = "SELL"
-        else:
-            ma_signal = "neutral"
-        signal_details["MA"] = ma_signal
-
-        # --- Bollinger Bands ---
-        bb_upper, bb_mid, bb_lower = compute_bollinger(close)
-        bb_upper_val = float(bb_upper.iloc[-1])
-        bb_lower_val = float(bb_lower.iloc[-1])
-        bb_width = float((bb_upper.iloc[-1] - bb_lower.iloc[-1]) / bb_mid.iloc[-1])
-        avg_bb_width = float(
-            ((bb_upper - bb_lower) / bb_mid).rolling(20).mean().iloc[-1]
-        )
-        squeeze = not np.isnan(avg_bb_width) and bb_width < avg_bb_width * 0.8
-
-        if current_price < bb_lower_val:
-            buy_signals += 1
-            bb_signal = "BUY (below lower)"
-        elif current_price < bb_lower_val * 1.01 and squeeze:
-            buy_signals += 1
-            bb_signal = "BUY (squeeze)"
-        elif current_price > bb_upper_val:
-            sell_signals += 1
-            bb_signal = "SELL (above upper)"
-        else:
-            bb_signal = "neutral"
-        signal_details["Bollinger"] = bb_signal
-
-        # --- Volume ---
-        curr_vol = float(volume.iloc[-1])
-        vol_ratio = curr_vol / avg_vol_20 if avg_vol_20 > 0 else 1.0
-
-        if vol_ratio > 1.5 and pct_change > 0:
-            buy_signals += 1
-            vol_signal = f"BUY ({vol_ratio:.1f}x avg)"
-        elif vol_ratio > 1.5 and pct_change < 0:
-            sell_signals += 1
-            vol_signal = f"SELL ({vol_ratio:.1f}x avg)"
-        else:
-            vol_signal = f"neutral ({vol_ratio:.1f}x avg)"
-        signal_details["Volume"] = vol_signal
-
-        # --- Candlestick ---
-        candle_df = pd.DataFrame(
-            {"Open": open_, "High": high, "Low": low, "Close": close}
-        )
-        candle_result = detect_candlestick_patterns(candle_df)
-        if candle_result["bias"] > 0:
-            buy_signals += 1
-        elif candle_result["bias"] < 0:
-            sell_signals += 1
-        signal_details["Candlestick"] = candle_result["pattern"] if candle_result["pattern"] != "none" else "neutral"
-
-        # --- VWAP (20-Tages gewichteter Durchschnitt) ---
-        typical_price = (high + low + close) / 3
-        vol_20 = volume.tail(20)
-        tp_20 = typical_price.tail(20)
-        vwap_val = float((tp_20 * vol_20).sum() / vol_20.sum()) if float(vol_20.sum()) > 0 else current_price
-        if current_price > vwap_val:
-            buy_signals += 1
-            vwap_signal = f"BUY ({vwap_val:.2f})"
-        else:
-            sell_signals += 1
-            vwap_signal = f"SELL ({vwap_val:.2f})"
-        signal_details["VWAP"] = vwap_signal
-
-        # --- Squeeze Momentum (Lazybear-Methode) ---
-        ema20 = close.ewm(span=20, adjust=False).mean()
-        kc_upper = ema20 + 1.5 * atr_series
-        kc_lower = ema20 - 1.5 * atr_series
-        sq_on = (float(bb_upper.iloc[-1]) < float(kc_upper.iloc[-1])) and \
-                (float(bb_lower.iloc[-1]) > float(kc_lower.iloc[-1]))
-        highest_high_20 = high.rolling(20).max()
-        lowest_low_20 = low.rolling(20).min()
-        delta_close = close - ((highest_high_20 + lowest_low_20) / 2 + ema20) / 2
-        dc_tail = delta_close.tail(5).values
-        squeeze_momentum = 0.0
-        if len(dc_tail) == 5 and not np.any(np.isnan(dc_tail)):
-            coeffs = np.polyfit(np.arange(5), dc_tail, 1)
-            squeeze_momentum = float(np.polyval(coeffs, 4))
-
-        if not sq_on and squeeze_momentum > 0:
-            buy_signals += 1
-            sq_signal = f"BUY (mom={squeeze_momentum:.3f})"
-        elif not sq_on and squeeze_momentum < 0:
-            sell_signals += 1
-            sq_signal = f"SELL (mom={squeeze_momentum:.3f})"
-        else:
-            sq_signal = f"Squeeze {'ON' if sq_on else 'OFF'}"
-        signal_details["Squeeze"] = sq_signal
-
-        net_score = buy_signals - sell_signals
-
-        # --- ADX ---
-        adx_s, plus_di_s, minus_di_s = compute_adx(high, low, close)
-        adx_val      = float(adx_s.iloc[-1])
-        plus_di_val  = float(plus_di_s.iloc[-1])
-        minus_di_val = float(minus_di_s.iloc[-1])
-
-        # --- Größter Tages-Move der letzten 5 Tage (Gap-Filter) ---
-        recent_max_gap = float(close.pct_change().tail(5).abs().max()) * 100
-
-        # --- ATR-Qualitaetsfilter ---
-        cfd_atr_ok = CFG["cfd"]["atr_pct_min"] <= atr_pct <= CFG["cfd"]["atr_pct_max"]
-
-        # --- Trend-Reife: Wie viele der letzten N Tage MA-Struktur gehalten ---
-        trend_long_days = 0
-        trend_short_days = 0
-        sma20_arr = sma20.values
-        sma50_arr = sma50.values
-        close_arr = close.values
-        for i in range(max(len(close_arr) - 10, 0), len(close_arr)):
-            if close_arr[i] > sma20_arr[i] > sma50_arr[i]:
-                trend_long_days += 1
-            if close_arr[i] < sma20_arr[i] < sma50_arr[i]:
-                trend_short_days += 1
-
-        cfd_cfg = CFG["cfd"]
-        w = CFG["scoring"]["weights"]
-        bonus = CFG["scoring"]["bonus"]
-
-        # --- CFD Long Score (gewichtet, max 8.0 + 2.0 Bonus) ---
-        cfd_long = 0.0
-        # ADX + DI-Bestaetigung (2.0)
-        if adx_val > cfd_cfg["adx_min"] and plus_di_val > minus_di_val:
-            cfd_long += w["adx_di"]
-        # MA-Struktur (1.5)
-        if current_price > sma20_val > sma50_val:
-            cfd_long += w["ma_structure"]
-        # EMA-Stack (1.5)
-        if ema9_val > ema21_val:
-            cfd_long += w["ema_stack"]
-        # MACD Histogram (1.0)
-        if curr_hist > 0 and curr_hist > prev_hist:
-            cfd_long += w["macd"]
-        # RSI in Zone (1.0)
-        if cfd_cfg["rsi_long_min"] <= rsi_val <= cfd_cfg["rsi_long_max"]:
-            cfd_long += w["rsi_zone"]
-        # Volume (0.5)
-        if vol_ratio >= cfd_cfg["vol_ratio_min"]:
-            cfd_long += w["volume"]
-        # Kein Gap (0.5)
-        if recent_max_gap < cfd_cfg["max_gap_pct"]:
-            cfd_long += w["no_gap"]
-        # Bonus-Punkte (bis +2.0)
-        if trend_long_days >= bonus["trend_maturity_days"]:
-            cfd_long += bonus["trend_maturity_pts"]
-        if vol_ratio >= bonus["vol_ratio_high"]:
-            cfd_long += bonus["vol_ratio_pts"]
-        if adx_val > bonus["adx_strong"]:
-            cfd_long += bonus["adx_strong_pts"]
-        if not sq_on and squeeze_momentum > 0:
-            cfd_long += bonus["squeeze_fire_pts"]
-
-        # --- CFD Short Score (gewichtet, max 8.0 + 2.0 Bonus) ---
-        cfd_short = 0.0
-        if adx_val > cfd_cfg["adx_min"] and minus_di_val > plus_di_val:
-            cfd_short += w["adx_di"]
-        if current_price < sma20_val < sma50_val:
-            cfd_short += w["ma_structure"]
-        if ema9_val < ema21_val:
-            cfd_short += w["ema_stack"]
-        if curr_hist < 0 and curr_hist < prev_hist:
-            cfd_short += w["macd"]
-        if cfd_cfg["rsi_short_min"] <= rsi_val <= cfd_cfg["rsi_short_max"]:
-            cfd_short += w["rsi_zone"]
-        if vol_ratio >= cfd_cfg["vol_ratio_min"]:
-            cfd_short += w["volume"]
-        if recent_max_gap < cfd_cfg["max_gap_pct"]:
-            cfd_short += w["no_gap"]
-        if trend_short_days >= bonus["trend_maturity_days"]:
-            cfd_short += bonus["trend_maturity_pts"]
-        if vol_ratio >= bonus["vol_ratio_high"]:
-            cfd_short += bonus["vol_ratio_pts"]
-        if adx_val > bonus["adx_strong"]:
-            cfd_short += bonus["adx_strong_pts"]
-        if not sq_on and squeeze_momentum < 0:
-            cfd_short += bonus["squeeze_fire_pts"]
-
-        # --- ATR-Gate + Trend-Reife-Filter ---
-        if not cfd_atr_ok:
-            cfd_long = 0.0
-            cfd_short = 0.0
-        else:
-            if trend_long_days < cfd_cfg["trend_maturity_min_days"]:
-                cfd_long = 0.0
-            if trend_short_days < cfd_cfg["trend_maturity_min_days"]:
-                cfd_short = 0.0
-
-        # --- Exklusive Richtung: nur staerkere Richtung behalten ---
-        if cfd_long >= CFG["scoring"]["threshold"] and cfd_short >= CFG["scoring"]["threshold"]:
-            if cfd_long > cfd_short:
-                cfd_short = 0.0
-            elif cfd_short > cfd_long:
-                cfd_long = 0.0
-            else:
-                # Gleichstand: DI entscheidet
-                if plus_di_val >= minus_di_val:
-                    cfd_short = 0.0
-                else:
-                    cfd_long = 0.0
-
-        cfd_long = round(cfd_long, 1)
-        cfd_short = round(cfd_short, 1)
-
-        # --- ATR-basierte Stop/Target-Level ---
-        atr_stop = cfd_cfg["atr_stop_mult"]
-        atr_tp1 = cfd_cfg["atr_tp1_mult"]
-        atr_tp2 = cfd_cfg["atr_tp2_mult"]
-        stop_long   = round(current_price - atr_stop * atr_val, 2)
-        tp1_long    = round(current_price + atr_tp1 * atr_val, 2)
-        tp2_long    = round(current_price + atr_tp2 * atr_val, 2)
-        stop_short  = round(current_price + atr_stop * atr_val, 2)
-        tp1_short   = round(current_price - atr_tp1 * atr_val, 2)
-        tp2_short   = round(current_price - atr_tp2 * atr_val, 2)
-
-        # --- RVOL Label ---
-        rvol_label = "🔥 Hoch" if vol_ratio > 2.0 else "↑ Erhöht" if vol_ratio > 1.5 else "— Normal"
-
-        # Use ticker as name (avoids extra API call per ticker)
-        name = ticker
-
-        return {
-            "ticker": ticker,
-            "name": name,
-            "market": market,
-            "buy_signals": buy_signals,
-            "sell_signals": sell_signals,
-            "net_score": net_score,
-            "rsi": signal_details.get("RSI", "-"),
-            "rsi_signal": signal_details.get("RSI_signal", "-"),
-            "macd": signal_details.get("MACD", "-"),
-            "ma": signal_details.get("MA", "-"),
-            "bollinger": signal_details.get("Bollinger", "-"),
-            "volume": signal_details.get("Volume", "-"),
-            "candlestick": signal_details.get("Candlestick", "-"),
-            "vwap": signal_details.get("VWAP", "-"),
-            "squeeze": signal_details.get("Squeeze", "-"),
-            "price": round(current_price, 2),
-            "pct_change": round(pct_change, 2),
-            # CFD-Felder
-            "atr": round(atr_val, 3),
-            "atr_pct": atr_pct,
-            "adx": round(adx_val, 1),
-            "plus_di": round(plus_di_val, 1),
-            "minus_di": round(minus_di_val, 1),
-            "vol_ratio": round(vol_ratio, 2),
-            "rvol_label": rvol_label,
-            "recent_max_gap": round(recent_max_gap, 1),
-            "cfd_long_score": cfd_long,
-            "cfd_short_score": cfd_short,
-            "cfd_quality_score": max(cfd_long, cfd_short),
-            "trend_long_days": trend_long_days,
-            "trend_short_days": trend_short_days,
-            "stop_long": stop_long,
-            "tp1_long": tp1_long,
-            "tp2_long": tp2_long,
-            "stop_short": stop_short,
-            "tp1_short": tp1_short,
-            "tp2_short": tp2_short,
-        }
-
     except Exception as exc:
         logging.error("%s: %s", ticker, exc)
         return None
+
+    close = df["Close"]
+    volume = df["Volume"]
+    open_ = df["Open"]
+    high = df["High"]
+    low = df["Low"]
+
+    current_price = float(close.iloc[-1])
+    prev_price = float(close.iloc[-2])
+    pct_change = (current_price - prev_price) / prev_price * 100
+
+    # --- Mindest-Liquidität ---
+    avg_vol_20 = float(volume.rolling(20).mean().iloc[-1])
+    if avg_vol_20 < MIN_AVG_VOLUME:
+        return None
+
+    # --- ATR (wird früh benötigt für Squeeze-Keltner) ---
+    atr_series = compute_atr(high, low, close)
+    atr_val = float(atr_series.iloc[-1])
+    atr_pct = round(atr_val / current_price * 100, 2)
+
+    buy_signals = 0
+    sell_signals = 0
+    signal_details = {}
+
+    # --- RSI ---
+    rsi = compute_rsi(close)
+    rsi_val = float(rsi.iloc[-1])
+    signal_details["RSI"] = round(rsi_val, 1)
+    if rsi_val < 30:
+        buy_signals += 1
+        signal_details["RSI_signal"] = "BUY"
+    elif rsi_val > 70:
+        sell_signals += 1
+        signal_details["RSI_signal"] = "SELL"
+    else:
+        signal_details["RSI_signal"] = "neutral"
+
+    # --- MACD ---
+    macd_line, signal_line, histogram = compute_macd(close)
+    prev_hist = float(histogram.iloc[-2]) if len(histogram) >= 2 else 0
+    curr_hist = float(histogram.iloc[-1])
+    if prev_hist < 0 and curr_hist > 0:
+        buy_signals += 1
+        macd_signal = "BUY"
+    elif prev_hist > 0 and curr_hist < 0:
+        sell_signals += 1
+        macd_signal = "SELL"
+    elif curr_hist > 0:
+        macd_signal = "bullish"
+    else:
+        macd_signal = "bearish"
+    signal_details["MACD"] = macd_signal
+
+    # --- Moving Averages ---
+    sma20 = close.rolling(20).mean()
+    sma50 = close.rolling(50).mean()
+    ema9 = close.ewm(span=9, adjust=False).mean()
+    ema21 = close.ewm(span=21, adjust=False).mean()
+
+    sma20_val = float(sma20.iloc[-1])
+    sma50_val = float(sma50.iloc[-1])
+    ema9_val = float(ema9.iloc[-1])
+    ema21_val = float(ema21.iloc[-1])
+    ema9_prev = float(ema9.iloc[-2])
+    ema21_prev = float(ema21.iloc[-2])
+
+    ma_buy = current_price > sma20_val > sma50_val
+    ma_sell = current_price < sma20_val < sma50_val
+    ema_cross_buy = ema9_prev < ema21_prev and ema9_val > ema21_val
+    ema_cross_sell = ema9_prev > ema21_prev and ema9_val < ema21_val
+
+    if ma_buy or ema_cross_buy:
+        buy_signals += 1
+        ma_signal = "BUY"
+    elif ma_sell or ema_cross_sell:
+        sell_signals += 1
+        ma_signal = "SELL"
+    else:
+        ma_signal = "neutral"
+    signal_details["MA"] = ma_signal
+
+    # --- Bollinger Bands ---
+    bb_upper, bb_mid, bb_lower = compute_bollinger(close)
+    bb_upper_val = float(bb_upper.iloc[-1])
+    bb_lower_val = float(bb_lower.iloc[-1])
+    bb_width = float((bb_upper.iloc[-1] - bb_lower.iloc[-1]) / bb_mid.iloc[-1])
+    avg_bb_width = float(
+        ((bb_upper - bb_lower) / bb_mid).rolling(20).mean().iloc[-1]
+    )
+    squeeze = not np.isnan(avg_bb_width) and bb_width < avg_bb_width * 0.8
+
+    if current_price < bb_lower_val:
+        buy_signals += 1
+        bb_signal = "BUY (below lower)"
+    elif current_price < bb_lower_val * 1.01 and squeeze:
+        buy_signals += 1
+        bb_signal = "BUY (squeeze)"
+    elif current_price > bb_upper_val:
+        sell_signals += 1
+        bb_signal = "SELL (above upper)"
+    else:
+        bb_signal = "neutral"
+    signal_details["Bollinger"] = bb_signal
+
+    # --- Volume ---
+    curr_vol = float(volume.iloc[-1])
+    vol_ratio = curr_vol / avg_vol_20 if avg_vol_20 > 0 else 1.0
+
+    if vol_ratio > 1.5 and pct_change > 0:
+        buy_signals += 1
+        vol_signal = f"BUY ({vol_ratio:.1f}x avg)"
+    elif vol_ratio > 1.5 and pct_change < 0:
+        sell_signals += 1
+        vol_signal = f"SELL ({vol_ratio:.1f}x avg)"
+    else:
+        vol_signal = f"neutral ({vol_ratio:.1f}x avg)"
+    signal_details["Volume"] = vol_signal
+
+    # --- Candlestick ---
+    candle_df = pd.DataFrame(
+        {"Open": open_, "High": high, "Low": low, "Close": close}
+    )
+    candle_result = detect_candlestick_patterns(candle_df)
+    if candle_result["bias"] > 0:
+        buy_signals += 1
+    elif candle_result["bias"] < 0:
+        sell_signals += 1
+    signal_details["Candlestick"] = candle_result["pattern"] if candle_result["pattern"] != "none" else "neutral"
+
+    # --- VWAP (20-Tages gewichteter Durchschnitt) ---
+    typical_price = (high + low + close) / 3
+    vol_20 = volume.tail(20)
+    tp_20 = typical_price.tail(20)
+    vwap_val = float((tp_20 * vol_20).sum() / vol_20.sum()) if float(vol_20.sum()) > 0 else current_price
+    if current_price > vwap_val:
+        buy_signals += 1
+        vwap_signal = f"BUY ({vwap_val:.2f})"
+    else:
+        sell_signals += 1
+        vwap_signal = f"SELL ({vwap_val:.2f})"
+    signal_details["VWAP"] = vwap_signal
+
+    # --- Squeeze Momentum (Lazybear-Methode) ---
+    ema20 = close.ewm(span=20, adjust=False).mean()
+    kc_upper = ema20 + 1.5 * atr_series
+    kc_lower = ema20 - 1.5 * atr_series
+    sq_on = (float(bb_upper.iloc[-1]) < float(kc_upper.iloc[-1])) and \
+            (float(bb_lower.iloc[-1]) > float(kc_lower.iloc[-1]))
+    highest_high_20 = high.rolling(20).max()
+    lowest_low_20 = low.rolling(20).min()
+    delta_close = close - ((highest_high_20 + lowest_low_20) / 2 + ema20) / 2
+    dc_tail = delta_close.tail(5).values
+    squeeze_momentum = 0.0
+    if len(dc_tail) == 5 and not np.any(np.isnan(dc_tail)):
+        coeffs = np.polyfit(np.arange(5), dc_tail, 1)
+        squeeze_momentum = float(np.polyval(coeffs, 4))
+
+    if not sq_on and squeeze_momentum > 0:
+        buy_signals += 1
+        sq_signal = f"BUY (mom={squeeze_momentum:.3f})"
+    elif not sq_on and squeeze_momentum < 0:
+        sell_signals += 1
+        sq_signal = f"SELL (mom={squeeze_momentum:.3f})"
+    else:
+        sq_signal = f"Squeeze {'ON' if sq_on else 'OFF'}"
+    signal_details["Squeeze"] = sq_signal
+
+    net_score = buy_signals - sell_signals
+
+    # --- ADX ---
+    adx_s, plus_di_s, minus_di_s = compute_adx(high, low, close)
+    adx_val      = float(adx_s.iloc[-1])
+    plus_di_val  = float(plus_di_s.iloc[-1])
+    minus_di_val = float(minus_di_s.iloc[-1])
+
+    # --- Größter Tages-Move der letzten 5 Tage (Gap-Filter) ---
+    recent_max_gap = float(close.pct_change().tail(5).abs().max()) * 100
+
+    # --- ATR-Qualitaetsfilter ---
+    cfd_atr_ok = CFG["cfd"]["atr_pct_min"] <= atr_pct <= CFG["cfd"]["atr_pct_max"]
+
+    # --- Trend-Reife: Wie viele der letzten N Tage MA-Struktur gehalten ---
+    trend_long_days = 0
+    trend_short_days = 0
+    sma20_arr = sma20.values
+    sma50_arr = sma50.values
+    close_arr = close.values
+    for i in range(max(len(close_arr) - 10, 0), len(close_arr)):
+        if close_arr[i] > sma20_arr[i] > sma50_arr[i]:
+            trend_long_days += 1
+        if close_arr[i] < sma20_arr[i] < sma50_arr[i]:
+            trend_short_days += 1
+
+    cfd_cfg = CFG["cfd"]
+    w = CFG["scoring"]["weights"]
+    bonus = CFG["scoring"]["bonus"]
+
+    # --- CFD Long Score (gewichtet, max 8.0 + 2.0 Bonus) ---
+    cfd_long = 0.0
+    # ADX + DI-Bestaetigung (2.0)
+    if adx_val > cfd_cfg["adx_min"] and plus_di_val > minus_di_val:
+        cfd_long += w["adx_di"]
+    # MA-Struktur (1.5)
+    if current_price > sma20_val > sma50_val:
+        cfd_long += w["ma_structure"]
+    # EMA-Stack (1.5)
+    if ema9_val > ema21_val:
+        cfd_long += w["ema_stack"]
+    # MACD Histogram (1.0)
+    if curr_hist > 0 and curr_hist > prev_hist:
+        cfd_long += w["macd"]
+    # RSI in Zone (1.0)
+    if cfd_cfg["rsi_long_min"] <= rsi_val <= cfd_cfg["rsi_long_max"]:
+        cfd_long += w["rsi_zone"]
+    # Volume (0.5)
+    if vol_ratio >= cfd_cfg["vol_ratio_min"]:
+        cfd_long += w["volume"]
+    # Kein Gap (0.5)
+    if recent_max_gap < cfd_cfg["max_gap_pct"]:
+        cfd_long += w["no_gap"]
+    # Bonus-Punkte (bis +2.0)
+    if trend_long_days >= bonus["trend_maturity_days"]:
+        cfd_long += bonus["trend_maturity_pts"]
+    if vol_ratio >= bonus["vol_ratio_high"]:
+        cfd_long += bonus["vol_ratio_pts"]
+    if adx_val > bonus["adx_strong"]:
+        cfd_long += bonus["adx_strong_pts"]
+    if not sq_on and squeeze_momentum > 0:
+        cfd_long += bonus["squeeze_fire_pts"]
+
+    # --- CFD Short Score (gewichtet, max 8.0 + 2.0 Bonus) ---
+    cfd_short = 0.0
+    if adx_val > cfd_cfg["adx_min"] and minus_di_val > plus_di_val:
+        cfd_short += w["adx_di"]
+    if current_price < sma20_val < sma50_val:
+        cfd_short += w["ma_structure"]
+    if ema9_val < ema21_val:
+        cfd_short += w["ema_stack"]
+    if curr_hist < 0 and curr_hist < prev_hist:
+        cfd_short += w["macd"]
+    if cfd_cfg["rsi_short_min"] <= rsi_val <= cfd_cfg["rsi_short_max"]:
+        cfd_short += w["rsi_zone"]
+    if vol_ratio >= cfd_cfg["vol_ratio_min"]:
+        cfd_short += w["volume"]
+    if recent_max_gap < cfd_cfg["max_gap_pct"]:
+        cfd_short += w["no_gap"]
+    if trend_short_days >= bonus["trend_maturity_days"]:
+        cfd_short += bonus["trend_maturity_pts"]
+    if vol_ratio >= bonus["vol_ratio_high"]:
+        cfd_short += bonus["vol_ratio_pts"]
+    if adx_val > bonus["adx_strong"]:
+        cfd_short += bonus["adx_strong_pts"]
+    if not sq_on and squeeze_momentum < 0:
+        cfd_short += bonus["squeeze_fire_pts"]
+
+    # --- ATR-Gate + Trend-Reife-Filter ---
+    if not cfd_atr_ok:
+        cfd_long = 0.0
+        cfd_short = 0.0
+    else:
+        if trend_long_days < cfd_cfg["trend_maturity_min_days"]:
+            cfd_long = 0.0
+        if trend_short_days < cfd_cfg["trend_maturity_min_days"]:
+            cfd_short = 0.0
+
+    # --- Exklusive Richtung: nur staerkere Richtung behalten ---
+    if cfd_long >= CFG["scoring"]["threshold"] and cfd_short >= CFG["scoring"]["threshold"]:
+        if cfd_long > cfd_short:
+            cfd_short = 0.0
+        elif cfd_short > cfd_long:
+            cfd_long = 0.0
+        else:
+            # Gleichstand: DI entscheidet
+            if plus_di_val >= minus_di_val:
+                cfd_short = 0.0
+            else:
+                cfd_long = 0.0
+
+    cfd_long = round(cfd_long, 1)
+    cfd_short = round(cfd_short, 1)
+
+    # --- ATR-basierte Stop/Target-Level ---
+    atr_stop = cfd_cfg["atr_stop_mult"]
+    atr_tp1 = cfd_cfg["atr_tp1_mult"]
+    atr_tp2 = cfd_cfg["atr_tp2_mult"]
+    stop_long   = round(current_price - atr_stop * atr_val, 2)
+    tp1_long    = round(current_price + atr_tp1 * atr_val, 2)
+    tp2_long    = round(current_price + atr_tp2 * atr_val, 2)
+    stop_short  = round(current_price + atr_stop * atr_val, 2)
+    tp1_short   = round(current_price - atr_tp1 * atr_val, 2)
+    tp2_short   = round(current_price - atr_tp2 * atr_val, 2)
+
+    # --- RVOL Label ---
+    rvol_label = "🔥 Hoch" if vol_ratio > 2.0 else "↑ Erhöht" if vol_ratio > 1.5 else "— Normal"
+
+    # Use ticker as name (avoids extra API call per ticker)
+    name = ticker
+
+    return {
+        "ticker": ticker,
+        "name": name,
+        "market": market,
+        "buy_signals": buy_signals,
+        "sell_signals": sell_signals,
+        "net_score": net_score,
+        "rsi": signal_details.get("RSI", "-"),
+        "rsi_signal": signal_details.get("RSI_signal", "-"),
+        "macd": signal_details.get("MACD", "-"),
+        "ma": signal_details.get("MA", "-"),
+        "bollinger": signal_details.get("Bollinger", "-"),
+        "volume": signal_details.get("Volume", "-"),
+        "candlestick": signal_details.get("Candlestick", "-"),
+        "vwap": signal_details.get("VWAP", "-"),
+        "squeeze": signal_details.get("Squeeze", "-"),
+        "price": round(current_price, 2),
+        "pct_change": round(pct_change, 2),
+        # CFD-Felder
+        "atr": round(atr_val, 3),
+        "atr_pct": atr_pct,
+        "adx": round(adx_val, 1),
+        "plus_di": round(plus_di_val, 1),
+        "minus_di": round(minus_di_val, 1),
+        "vol_ratio": round(vol_ratio, 2),
+        "rvol_label": rvol_label,
+        "recent_max_gap": round(recent_max_gap, 1),
+        "cfd_long_score": cfd_long,
+        "cfd_short_score": cfd_short,
+        "cfd_quality_score": max(cfd_long, cfd_short),
+        "trend_long_days": trend_long_days,
+        "trend_short_days": trend_short_days,
+        "stop_long": stop_long,
+        "tp1_long": tp1_long,
+        "tp2_long": tp2_long,
+        "stop_short": stop_short,
+        "tp1_short": tp1_short,
+        "tp2_short": tp2_short,
+    }
+
 
 
 # ---------------------------------------------------------------------------
@@ -1163,7 +1160,7 @@ def build_cfd_table(cfd_long: list, cfd_short: list) -> str:
 
 def _fear_greed_badge(fg: dict) -> str:
     value = fg.get("value", 50)
-    label = fg.get("label", "Neutral")
+    label = fg.get("label") or _fg_label(value)
     if value <= 20:
         color, bg = "#fff", "#c0392b"
     elif value <= 40:

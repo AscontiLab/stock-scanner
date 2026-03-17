@@ -1,6 +1,5 @@
 """Signale-Seite: CFD Long/Short + Buy/Sell Tabellen."""
 
-import csv
 import json
 from datetime import datetime
 from pathlib import Path
@@ -10,33 +9,15 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from dashboard.config import settings
+from utils import safe_float as _safe_float
+from utils import safe_int as _safe_int
+from utils import read_csv as _read_csv
+from utils import fg_label
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
 
 SCANNER_DIR = settings.SCANNER_DIR
-
-
-def _safe_float(val, default=0.0):
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return default
-
-
-def _safe_int(val, default=0):
-    try:
-        return int(float(val))
-    except (ValueError, TypeError):
-        return default
-
-
-def _read_csv(path: Path) -> list[dict]:
-    """Liest eine CSV-Datei und gibt Liste von Dicts zurueck."""
-    if not path.exists():
-        return []
-    with open(path, encoding="utf-8-sig") as f:
-        return list(csv.DictReader(f))
 
 
 def _get_scan_timestamp() -> str:
@@ -65,17 +46,7 @@ def _get_fear_greed() -> dict:
                 row = cur.fetchone()
             if row:
                 val = int(row[0])
-                if val <= 20:
-                    label = "Extreme Angst"
-                elif val <= 40:
-                    label = "Angst"
-                elif val <= 60:
-                    label = "Neutral"
-                elif val <= 80:
-                    label = "Gier"
-                else:
-                    label = "Extreme Gier"
-                return {"value": val, "label": label}
+                return {"value": val, "label": fg_label(val)}
     except Exception:
         pass
     return {"value": 50, "label": "Neutral (Fallback)"}

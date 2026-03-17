@@ -178,12 +178,8 @@ def _lookup_levels(ticker: str, direction: str) -> tuple:
     current = float(close.iloc[-1])
 
     # ATR(14) berechnen
-    tr = pd.concat([
-        high - low,
-        (high - close.shift(1)).abs(),
-        (low - close.shift(1)).abs(),
-    ], axis=1).max(axis=1)
-    atr_val = float(tr.rolling(14).mean().iloc[-1])
+    from stock_scanner import compute_atr
+    atr_val = float(compute_atr(high, low, close).iloc[-1])
 
     if direction == "long":
         stop = round(current - ATR_STOP_MULT * atr_val, 2)
@@ -378,22 +374,14 @@ def _check_single_position(pos: dict) -> dict:
     ema9_val = float(ema9.iloc[-1])
     ema21_val = float(ema21.iloc[-1])
 
-    # RSI (EMA-Smoothing, konsistent mit stock_scanner.py)
-    delta = close.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(com=13, min_periods=14).mean()
-    avg_loss = loss.ewm(com=13, min_periods=14).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100 - 100 / (1 + rs)
+    # RSI
+    from stock_scanner import compute_rsi
+    rsi = compute_rsi(close)
     rsi_val = float(rsi.iloc[-1])
 
     # MACD
-    ema12 = close.ewm(span=12, adjust=False).mean()
-    ema26 = close.ewm(span=26, adjust=False).mean()
-    macd_line = ema12 - ema26
-    macd_signal = macd_line.ewm(span=9, adjust=False).mean()
-    hist = macd_line - macd_signal
+    from stock_scanner import compute_macd
+    macd_line, macd_signal_line, hist = compute_macd(close)
     curr_hist = float(hist.iloc[-1])
     prev_hist = float(hist.iloc[-2]) if len(hist) > 1 else 0
 

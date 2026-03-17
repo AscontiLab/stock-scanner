@@ -1,39 +1,19 @@
 #!/usr/bin/env python3
 """Sendet Stock-Scanner-Ergebnisse an n8n Dashboard Webhook."""
 
-import csv
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
 
+from utils import safe_float as to_float
+from utils import safe_int as to_int
+from utils import read_csv as read_csv_safe
+
 N8N_WEBHOOK = "https://agents.umzwei.de/webhook/stock-update"
 HUB_DIR = Path(__file__).resolve().parent.parent / "hub"
-
-
-def read_csv_safe(path: str) -> list:
-    """Liest CSV und gibt Liste von Dicts zurück."""
-    if not os.path.exists(path):
-        return []
-    with open(path, encoding="utf-8-sig") as f:
-        return list(csv.DictReader(f))
-
-
-def to_float(v):
-    try:
-        return float(v)
-    except (ValueError, TypeError):
-        return 0.0
-
-
-def to_int(v, default=0):
-    try:
-        return int(float(v))
-    except (ValueError, TypeError):
-        return default
 
 
 def _status_from_signal(signal: dict, direction: str | None = None) -> str:
