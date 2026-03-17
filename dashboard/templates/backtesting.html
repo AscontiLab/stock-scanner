@@ -54,7 +54,7 @@
         {% if by_direction %}
         <table>
             <thead>
-                <tr><th>Richtung</th><th>Sig.</th><th>Win%</th><th>Avg R</th></tr>
+                <tr><th scope="col">Richtung</th><th scope="col">Sig.</th><th scope="col">Win%</th><th scope="col">Avg R</th></tr>
             </thead>
             <tbody>
                 {% for d in by_direction %}
@@ -118,7 +118,7 @@
     <div class="overflow-x-auto">
         <table>
             <thead>
-                <tr><th>Markt</th><th>Signale</th><th>Wins</th><th>Win%</th><th>Avg R</th><th>Total R</th></tr>
+                <tr><th scope="col">Markt</th><th scope="col">Signale</th><th scope="col">Wins</th><th scope="col">Win%</th><th scope="col">Avg R</th><th scope="col">Total R</th></tr>
             </thead>
             <tbody>
                 {% for m in by_market %}
@@ -153,16 +153,16 @@
         <table>
             <thead>
                 <tr>
-                    <th>Ticker</th>
-                    <th>Richtung</th>
-                    <th>Score</th>
-                    <th>Entry</th>
-                    <th>Exit</th>
-                    <th>Outcome</th>
-                    <th>Tag</th>
-                    <th>P&L (R)</th>
-                    <th>MFE</th>
-                    <th>MAE</th>
+                    <th scope="col">Ticker</th>
+                    <th scope="col">Richtung</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">Entry</th>
+                    <th scope="col">Exit</th>
+                    <th scope="col">Outcome</th>
+                    <th scope="col">Tag</th>
+                    <th scope="col">P&L (R)</th>
+                    <th scope="col">MFE</th>
+                    <th scope="col">MAE</th>
                 </tr>
             </thead>
             <tbody>

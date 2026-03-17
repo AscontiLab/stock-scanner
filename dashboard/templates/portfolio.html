@@ -127,11 +127,11 @@
             <!-- Warnungen (Akkordeon) -->
             {% if p.warnings %}
             <div class="mb-3" x-data="{ open: false }">
-                <button @click="open = !open"
+                <button @click="open = !open" :aria-expanded="open"
                     class="w-full text-left text-xs px-3 py-2 rounded-lg flex items-center justify-between"
                     style="background: rgba(255, 149, 0, 0.08); color: var(--orange); border: 1px solid rgba(255, 149, 0, 0.15);">
                     <span>{{ p.warnings|length }} Warnung{{ 'en' if p.warnings|length != 1 }}</span>
-                    <span x-text="open ? '−' : '+'"></span>
+                    <span x-text="open ? '−' : '+'" aria-hidden="true"></span>
                 </button>
                 <div class="accordion-content mt-2 space-y-1 px-2" :class="{ 'open': open }">
                     {% for w in p.warnings %}

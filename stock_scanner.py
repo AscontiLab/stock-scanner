@@ -1085,10 +1085,10 @@ def build_cfd_row(row: dict, direction: str) -> str:
     score = row[f"cfd_{direction}_score"]
     if direction == "long":
         stop, tp1, tp2 = row["stop_long"], row["tp1_long"], row["tp2_long"]
-        dir_color, dir_label, bg = "#27ae60", "LONG ▲", "#eafaf1"
+        dir_color, dir_label, bg = "#1a7a3a", "LONG ▲", "#eafaf1"
     else:
         stop, tp1, tp2 = row["stop_short"], row["tp1_short"], row["tp2_short"]
-        dir_color, dir_label, bg = "#e74c3c", "SHORT ▼", "#fdedec"
+        dir_color, dir_label, bg = "#c0392b", "SHORT ▼", "#fdedec"
 
     price  = row["price"]
     risk   = abs(price - stop)
@@ -1168,7 +1168,7 @@ def _fear_greed_badge(fg: dict) -> str:
     elif value <= 60:
         color, bg = "#fff", "#7f8c8d"
     elif value <= 80:
-        color, bg = "#fff", "#27ae60"
+        color, bg = "#fff", "#1a7a3a"
     else:
         color, bg = "#fff", "#145a32"
     return (
@@ -1193,7 +1193,7 @@ def build_portfolio_section(reports: list) -> str:
             continue
 
         # Farben
-        dir_color = "#27ae60" if r["direction"] == "long" else "#e74c3c"
+        dir_color = "#1a7a3a" if r["direction"] == "long" else "#c0392b"
         dir_label = r["direction"].upper()
         pnl_color = "#27ae60" if r["pnl_pct"] >= 0 else "#e74c3c"
         pnl_sign = "+" if r["pnl_pct"] >= 0 else ""
@@ -1295,7 +1295,7 @@ def generate_html(
   table td, table th {{ border: 1px solid #ddd; padding: 6px 10px }}
   table tr:hover {{ filter: brightness(0.95) }}
   .btn-add {{
-    background: #27ae60; color: white; border: none; border-radius: 4px;
+    background: #1a7a3a; color: white; border: none; border-radius: 4px;
     padding: 4px 10px; cursor: pointer; font-weight: bold; font-size: 1em;
   }}
   .btn-add:hover {{ background: #1e8449 }}

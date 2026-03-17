@@ -22,8 +22,8 @@
             --red: #ff3b5c;
             --orange: #ff9500;
             --text: #e2e8f0;
-            --text-muted: #64748b;
-            --text-dim: #475569;
+            --text-muted: #8b9bb5;
+            --text-dim: #7c8da3;
         }
         * { font-family: 'Inter', sans-serif; }
         .mono { font-family: 'JetBrains Mono', monospace; }
@@ -202,12 +202,25 @@
         .accordion-content.open {
             max-height: 500px;
         }
+
+        /* Accessibility */
+        a:focus-visible,button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;border-radius:6px}
+        .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
     </style>
     {% block head %}{% endblock %}
 </head>
 <body class="min-h-screen">
+    <a href="#main-content" class="sr-only" style="position:absolute" onfocus="this.style.position='static';this.style.width='auto';this.style.height='auto';this.style.clip='auto';this.style.overflow='visible';this.style.whiteSpace='normal';this.style.padding='8px 12px';this.style.background='var(--cyan)';this.style.color='var(--bg)';this.style.zIndex='100';this.style.borderRadius='6px'" onblur="this.style.position='absolute';this.style.width='1px';this.style.height='1px';this.style.clip='rect(0,0,0,0)';this.style.overflow='hidden';this.style.whiteSpace='nowrap';this.style.padding='0'">Zum Inhalt springen</a>
     <!-- Navigation -->
-    <nav class="scanline-header border-b px-6 py-4" style="border-color: var(--border);">
+    <nav class="scanline-header border-b px-6 py-4" style="border-color: var(--border);" aria-label="Hauptnavigation">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <div class="w-2 h-2 rounded-full pulse" style="background: var(--cyan); box-shadow: 0 0 8px var(--cyan);"></div>
@@ -221,7 +234,7 @@
         </div>
     </nav>
 
-    <main class="max-w-7xl mx-auto px-6 py-6">
+    <main id="main-content" class="max-w-7xl mx-auto px-6 py-6">
         {% block content %}{% endblock %}
     </main>
 
