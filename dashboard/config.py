@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = ""
     DASHBOARD_PORT: int = 8091
     CACHE_TTL_SECONDS: int = 300  # 5min Cache fuer Portfolio-Check
+    DASHBOARD_TOKEN: str = ""  # Bearer-Token fuer API-Zugriff (leer = kein Auth)
+    CORS_ORIGINS: str = ""  # Komma-getrennte Origins (leer = same-origin only)
 
     model_config = {"env_file": str(Path(__file__).parent.parent / ".env"), "extra": "ignore"}
 

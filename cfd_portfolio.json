@@ -1,22 +1,22 @@
 {
   "positions": [
     {
-      "id": "CVX_long_2026-03-13",
-      "ticker": "CVX",
+      "id": "PSX_long_2026-03-20",
+      "ticker": "PSX",
       "direction": "long",
-      "entry_price": 196.97,
-      "entry_date": "2026-03-13",
-      "stop_original": 190.73,
-      "stop_current": 190.73,
-      "tp1": 203.21,
-      "tp2": 213.61,
+      "entry_price": 178.34,
+      "entry_date": "2026-03-20",
+      "stop_original": 169.61,
+      "stop_current": 169.61,
+      "tp1": 187.07,
+      "tp2": 195.8,
       "tp1_hit": false,
       "tp1_hit_date": null,
-      "atr_at_entry": 4.161,
-      "score_at_entry": 9.0,
+      "atr_at_entry": 5.821,
+      "score_at_entry": 8.5,
       "market": "S&P 500",
-      "highest_since_entry": 197.84,
-      "lowest_since_entry": 194.69
+      "highest_since_entry": 178.79,
+      "lowest_since_entry": 176.14
     }
   ]
 }

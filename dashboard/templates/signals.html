@@ -266,6 +266,15 @@ function signalsApp() {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ticker, direction})
                 });
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    console.error('Add position failed:', resp.status, err);
+                    btn.textContent = '!';
+                    btn.title = resp.status + ': ' + err;
+                    setTimeout(() => { btn.textContent = '+'; btn.title = ''; }, 3000);
+                    this.adding = false;
+                    return;
+                }
                 const data = await resp.json();
                 if (data.ok) {
                     btn.textContent = 'OK';
@@ -275,11 +284,14 @@ function signalsApp() {
                     btn.style.color = '#00ff88';
                 } else {
                     btn.textContent = '!';
-                    setTimeout(() => { btn.textContent = '+'; }, 2000);
+                    btn.title = data.error || 'Unbekannter Fehler';
+                    setTimeout(() => { btn.textContent = '+'; btn.title = ''; }, 3000);
                 }
             } catch (e) {
+                console.error('Add position error:', e);
                 btn.textContent = '!';
-                setTimeout(() => { btn.textContent = '+'; }, 2000);
+                btn.title = e.message || 'Netzwerkfehler';
+                setTimeout(() => { btn.textContent = '+'; btn.title = ''; }, 3000);
             }
             this.adding = false;
         },

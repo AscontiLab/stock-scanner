@@ -101,6 +101,6 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     if not os.environ.get("CFD_API_KEY"):
-        print(f"Kein CFD_API_KEY gesetzt, verwende generierten Key: {API_KEY}")
+        print(f"Kein CFD_API_KEY gesetzt, verwende generierten Key: {API_KEY[:8]}...")
     print(f"CFD Portfolio API laeuft auf http://127.0.0.1:{PORT}")
     HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

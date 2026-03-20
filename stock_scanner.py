@@ -1344,7 +1344,7 @@ function addPosition(ticker, direction) {{
   var btn = event.target;
   btn.disabled = true;
   btn.textContent = '...';
-  fetch('https://agents.umzwei.de/webhook/cfd-add-position', {{
+  fetch('/api/portfolio/add', {{
     method: 'POST',
     headers: {{'Content-Type': 'application/json'}},
     body: JSON.stringify({{ticker: ticker, direction: direction}})

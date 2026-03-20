@@ -1,7 +1,9 @@
 """Portfolio-Management: Aktive Positionen mit Empfehlung."""
 
+import logging
 import re
 import time
+import traceback
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -10,6 +12,8 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from dashboard.config import settings
+
+logger = logging.getLogger("portfolio")
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
@@ -78,7 +82,8 @@ async def add_position(req: AddPositionRequest):
         _cache["data"] = None
         return {"ok": True, "message": f"{ticker} {direction} hinzugefuegt", "position": result}
     except Exception as e:
-        return JSONResponse(status_code=400, content={"ok": False, "error": "Position konnte nicht hinzugefuegt werden"})
+        logger.error("add_position %s %s fehlgeschlagen: %s\n%s", ticker, direction, e, traceback.format_exc())
+        return JSONResponse(status_code=500, content={"ok": False, "error": f"Fehler: {e}"})
 
 
 @router.post("/api/portfolio/close")
@@ -92,7 +97,8 @@ async def close_position(req: ClosePositionRequest):
             return {"ok": True, "message": f"{req.ticker.upper()} geschlossen"}
         return JSONResponse(status_code=404, content={"ok": False, "error": "Position nicht gefunden"})
     except Exception as e:
-        return JSONResponse(status_code=400, content={"ok": False, "error": "Position konnte nicht geschlossen werden"})
+        logger.error("close_position %s fehlgeschlagen: %s\n%s", req.ticker, e, traceback.format_exc())
+        return JSONResponse(status_code=500, content={"ok": False, "error": f"Fehler: {e}"})
 
 
 @router.get("/api/portfolio/check")

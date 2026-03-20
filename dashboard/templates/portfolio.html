@@ -195,6 +195,14 @@ function portfolioApp() {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ticker, direction})
                 });
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    console.error('Close position failed:', resp.status, err);
+                    btn.textContent = resp.status + ' Fehler';
+                    btn.title = err;
+                    btn.disabled = false;
+                    return;
+                }
                 const data = await resp.json();
                 if (data.ok) {
                     const el = document.getElementById('pos-' + ticker + '-' + direction);
@@ -206,7 +214,9 @@ function portfolioApp() {
                     btn.disabled = false;
                 }
             } catch (e) {
-                btn.textContent = 'Fehler';
+                console.error('Close position error:', e);
+                btn.textContent = 'Netzwerkfehler';
+                btn.title = e.message;
                 btn.disabled = false;
             }
         },
