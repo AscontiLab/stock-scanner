@@ -9,6 +9,7 @@ __pycache__/
 *.db
 *.lock
 .env
+cfd_portfolio.json
 
 # Backup-Dumps explizit tracken
 !backup/
