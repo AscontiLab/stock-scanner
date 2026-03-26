@@ -1,74 +1,84 @@
-# Stock Scanner — Konfiguration
+# Stock Scanner — Konfiguration v2 (26.03.2026)
+# Datengetrieben optimiert basierend auf 119 aufgeloesten Signalen.
 # Alle Schwellenwerte fuer CFD-Signale, Scoring und Backtesting.
-# Wird von stock_scanner.py geladen. Fallback auf Defaults wenn Datei fehlt.
 
 # --- CFD Filter ---
 cfd:
-  # ADX-Schwellenwerte
+  # ADX-Schwellenwerte (Sweet Spot: 30-42, Penalty ab 45)
   adx_min: 30
-  adx_strong: 40            # Bonus-Punkt bei ADX > 40
+  adx_sweet_max: 42          # optimaler Bereich (76% Win bei 35-39)
+  adx_overripe: 45           # Penalty wenn ADX zu hoch (ueberreifer Trend)
 
-  # RSI-Zonen (enger als vorher)
+  # RSI-Zonen
   rsi_long_min: 45
   rsi_long_max: 62
   rsi_short_min: 38
   rsi_short_max: 55
 
   # ATR-Qualitaetsfilter (% vom Kurs)
-  atr_pct_min: 1.0           # zu enge Stops bei Low-Vol vermeiden
-  atr_pct_max: 8.0           # extrem volatile Werte rausfiltern
+  atr_pct_min: 1.0
+  atr_pct_max: 8.0
 
   # Trend-Reife: Minimum Tage mit gehaltener MA-Struktur
   trend_maturity_min_days: 3
 
   # Volume
-  vol_ratio_min: 1.2         # Mindest-Volumen-Ratio
-  vol_ratio_bonus: 2.0       # Bonus-Punkt bei Vol-Ratio >= 2.0
+  vol_ratio_min: 1.2
+  vol_ratio_bonus: 2.0
 
   # Gap-Filter
-  max_gap_pct: 5.0           # Max erlaubter Gap in letzten 5 Tagen
+  max_gap_pct: 5.0
 
   # ATR-Multiplikatoren fuer Stop/TP
   atr_stop_mult: 1.5
   atr_tp1_mult: 1.5
-  atr_tp2_mult: 3.0          # gesenkt von 4.0 — kein TP2 bei 5 Signalen erreicht
+  atr_tp2_mult: 2.0           # gesenkt von 3.0 — 0 TP2-Hits bei altem Wert
 
-  # Top-N Cap pro Richtung
-  top_n: 10
+  # Top-N Cap pro Richtung (Qualitaet > Quantitaet)
+  top_n: 5
+
+  # Short-spezifisch
+  short_score_cap: 7.5        # Short Score 8+ = 28% Win → Cap bei 7.5
+  short_resolve_max_days: 5   # Shorts schneller expiren (17/23 Expired waren Shorts)
 
 # --- Gewichtetes Scoring ---
 scoring:
   weights:
-    adx_di:       2.0        # ADX + DI-Bestaetigung
-    ma_structure:  1.5        # Kern-Trendrichtung (Price > SMA20 > SMA50)
-    ema_stack:     1.5        # Kurzfrist-Momentum (EMA9/21)
-    macd:          1.0        # MACD Histogram Momentum
-    rsi_zone:      1.0        # RSI in Zone
-    volume:        0.5        # Volumen-Bestaetigung
-    no_gap:        0.5        # Kein Gap > 5%
+    adx_di:       2.0         # ADX + DI-Bestaetigung
+    ma_structure:  1.5         # Kern-Trendrichtung (Price > SMA20 > SMA50)
+    ema_stack:     1.5         # Kurzfrist-Momentum (EMA9/21)
+    macd:          1.0         # MACD Histogram Momentum
+    rsi_zone:      1.0         # RSI in Zone
+    volume:        0.5         # Volumen-Bestaetigung
+    no_gap:        0.5         # Kein Gap > 5%
 
-  # Bonus-Punkte (bis +2.0 gesamt)
+  # Bonus-Punkte (gedeckelt auf max_bonus)
   bonus:
-    trend_maturity_days: 5    # +0.5 wenn >= 5 Tage
+    trend_maturity_days: 5     # +0.5 wenn 5-15 Tage
     trend_maturity_pts: 0.5
-    vol_ratio_high: 2.0       # +0.5 wenn Vol-Ratio >= 2.0
+    trend_overripe_days: 15    # Penalty wenn Trend aelter als 15 Tage
+    trend_overripe_penalty: -0.5
+    vol_ratio_high: 2.0
     vol_ratio_pts: 0.5
-    adx_strong: 40            # +0.5 wenn ADX > 40
-    adx_strong_pts: 0.5
-    squeeze_fire_pts: 0.5     # +0.5 bei Squeeze-Fire
+    squeeze_fire_pts: 0.5
+    max_bonus: 1.0             # gesenkt von 2.0 — Score 7-7.9 performt besser als 8+
+
+  # Penalties (neu)
+  penalty:
+    adx_overripe_pts: -0.5     # ADX > 45 = ueberreifer Trend
 
   # Threshold fuer CFD-Signal
   threshold: 5.0
-  max_score: 10.0             # 8.0 Basis + 2.0 Bonus
+  max_score: 9.0               # 8.0 Basis + 1.0 Bonus (vorher 10.0)
 
 # --- Hauptscan ---
 main_scan:
-  min_score: 4                # |net_score| >= 4 fuer Signal
-  max_gap_pct: 3.0            # Max Gap fuer Hauptsignale
+  min_score: 4
+  max_gap_pct: 3.0
 
 # --- Backtesting ---
 backtesting:
   db_file: "cfd_backtesting.db"
-  resolve_after_days: 1       # Frueheste Aufloesung
-  resolve_max_days: 10        # Spaeteste Aufloesung
+  resolve_after_days: 1
+  resolve_max_days: 7          # gesenkt von 10 — weniger Expired
   enabled: true

@@ -35,7 +35,7 @@ def _send_telegram_position_alert(ticker, direction, event, price, pnl_pct):
 # ATR-Multiplikatoren (zentrale Konstanten statt Hardcoding)
 ATR_STOP_MULT = 1.5   # Stop-Loss Abstand in ATR
 ATR_TP1_MULT = 1.5    # Take-Profit 1 Abstand in ATR
-ATR_TP2_MULT = 3.0    # Take-Profit 2 Abstand in ATR (gesenkt von 4.0)
+ATR_TP2_MULT = 2.0    # Take-Profit 2 Abstand in ATR (gesenkt von 3.0, datengetrieben)
 ATR_TRAIL_MULT = 1.5  # Trailing-Stop Abstand in ATR (nach TP1-Hit)
 
 _EMPTY_PORTFOLIO = {"positions": []}

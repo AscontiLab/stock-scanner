@@ -180,10 +180,11 @@ def log_cfd_signal(run_id: int, row: dict, direction: str) -> int:
 # Resolution
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def resolve_signals(min_days: int = 1, max_days: int = 10):
+def resolve_signals(min_days: int = 1, max_days: int = 7, short_max_days: int = 5):
     """
     Loest offene Signale auf: prueft per yfinance ob Stop, TP1 oder TP2
     zuerst getroffen wurde.
+    Shorts haben ein kuerzeres Resolve-Window (default 5 Tage).
     """
     import yfinance as yf
 
@@ -206,7 +207,8 @@ def resolve_signals(min_days: int = 1, max_days: int = 10):
         scan_date = datetime.strptime(sig["scan_date"], "%Y-%m-%d").date()
         days_since = (today - scan_date).days
         if days_since >= min_days:
-            eligible.append((sig, scan_date, min(days_since, max_days)))
+            sig_max = short_max_days if sig["direction"] == "short" else max_days
+            eligible.append((sig, scan_date, min(days_since, sig_max)))
 
     if not eligible:
         print(f"Keine Signale aelter als {min_days} Tag(e).")
@@ -250,15 +252,16 @@ def resolve_signals(min_days: int = 1, max_days: int = 10):
                 except Exception:
                     pass
 
-            # Filter: nur Tage nach scan_date
+            # Filter: nur Tage nach scan_date (richtungsabhaengiges Window)
+            sig_max = short_max_days if direction == "short" else max_days
             mask = ticker_df.index.date > scan_date
-            post_scan = ticker_df.loc[mask].head(max_days)
+            post_scan = ticker_df.loc[mask].head(sig_max)
         except Exception:
             continue
 
         if post_scan.empty:
             # Signal zu neu oder keine Daten
-            if days_avail > max_days:
+            if days_avail > sig_max:
                 # Expired
                 _resolve_signal(conn, sig["id"], "expired", days_avail,
                                 float(entry), 0.0, 0.0, 0.0)
@@ -322,7 +325,8 @@ def resolve_signals(min_days: int = 1, max_days: int = 10):
                     outcome_day = day_idx
 
         # Wenn nach max_days kein Ergebnis und genug Tage vergangen
-        if outcome is None and days_avail >= max_days:
+        sig_max = short_max_days if direction == "short" else max_days
+        if outcome is None and days_avail >= sig_max:
             outcome = "expired"
             exit_price = float(post_scan["Close"].iloc[-1])
             outcome_day = len(post_scan)

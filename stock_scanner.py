@@ -27,15 +27,17 @@ warnings.filterwarnings("ignore")
 
 _DEFAULT_CONFIG = {
     "cfd": {
-        "adx_min": 30, "adx_strong": 40,
+        "adx_min": 30, "adx_sweet_max": 42, "adx_overripe": 45,
         "rsi_long_min": 45, "rsi_long_max": 62,
         "rsi_short_min": 38, "rsi_short_max": 55,
         "atr_pct_min": 1.0, "atr_pct_max": 8.0,
         "trend_maturity_min_days": 3,
         "vol_ratio_min": 1.2, "vol_ratio_bonus": 2.0,
         "max_gap_pct": 5.0,
-        "atr_stop_mult": 1.5, "atr_tp1_mult": 1.5, "atr_tp2_mult": 3.0,
-        "top_n": 10,
+        "atr_stop_mult": 1.5, "atr_tp1_mult": 1.5, "atr_tp2_mult": 2.0,
+        "top_n": 5,
+        "short_score_cap": 7.5,
+        "short_resolve_max_days": 5,
     },
     "scoring": {
         "weights": {
@@ -44,16 +46,20 @@ _DEFAULT_CONFIG = {
         },
         "bonus": {
             "trend_maturity_days": 5, "trend_maturity_pts": 0.5,
+            "trend_overripe_days": 15, "trend_overripe_penalty": -0.5,
             "vol_ratio_high": 2.0, "vol_ratio_pts": 0.5,
-            "adx_strong": 40, "adx_strong_pts": 0.5,
             "squeeze_fire_pts": 0.5,
+            "max_bonus": 1.0,
         },
-        "threshold": 5.0, "max_score": 10.0,
+        "penalty": {
+            "adx_overripe_pts": -0.5,
+        },
+        "threshold": 5.0, "max_score": 9.0,
     },
     "main_scan": {"min_score": 4, "max_gap_pct": 3.0},
     "backtesting": {
         "db_file": "cfd_backtesting.db", "resolve_after_days": 1,
-        "resolve_max_days": 10, "enabled": True,
+        "resolve_max_days": 7, "enabled": True,
     },
 }
 
@@ -786,7 +792,7 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
     w = CFG["scoring"]["weights"]
     bonus = CFG["scoring"]["bonus"]
 
-    # --- CFD Long Score (gewichtet, max 8.0 + 2.0 Bonus) ---
+    # --- CFD Long Score (gewichtet, max 8.0 + 1.0 Bonus - Penalties) ---
     cfd_long = 0.0
     # ADX + DI-Bestaetigung (2.0)
     if adx_val > cfd_cfg["adx_min"] and plus_di_val > minus_di_val:
@@ -809,17 +815,23 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
     # Kein Gap (0.5)
     if recent_max_gap < cfd_cfg["max_gap_pct"]:
         cfd_long += w["no_gap"]
-    # Bonus-Punkte (bis +2.0)
-    if trend_long_days >= bonus["trend_maturity_days"]:
-        cfd_long += bonus["trend_maturity_pts"]
+    # Bonus-Punkte (gedeckelt auf max_bonus)
+    long_bonus = 0.0
+    if bonus["trend_maturity_days"] <= trend_long_days <= bonus.get("trend_overripe_days", 999):
+        long_bonus += bonus["trend_maturity_pts"]
     if vol_ratio >= bonus["vol_ratio_high"]:
-        cfd_long += bonus["vol_ratio_pts"]
-    if adx_val > bonus["adx_strong"]:
-        cfd_long += bonus["adx_strong_pts"]
+        long_bonus += bonus["vol_ratio_pts"]
     if not sq_on and squeeze_momentum > 0:
-        cfd_long += bonus["squeeze_fire_pts"]
+        long_bonus += bonus["squeeze_fire_pts"]
+    cfd_long += min(long_bonus, bonus.get("max_bonus", 1.0))
+    # Penalties: ueberreifer Trend oder ADX
+    penalty = CFG["scoring"].get("penalty", {})
+    if trend_long_days > bonus.get("trend_overripe_days", 999):
+        cfd_long += bonus.get("trend_overripe_penalty", 0)
+    if adx_val > cfd_cfg.get("adx_overripe", 99):
+        cfd_long += penalty.get("adx_overripe_pts", 0)
 
-    # --- CFD Short Score (gewichtet, max 8.0 + 2.0 Bonus) ---
+    # --- CFD Short Score (gewichtet, max 8.0 + 1.0 Bonus - Penalties) ---
     cfd_short = 0.0
     if adx_val > cfd_cfg["adx_min"] and minus_di_val > plus_di_val:
         cfd_short += w["adx_di"]
@@ -835,14 +847,24 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
         cfd_short += w["volume"]
     if recent_max_gap < cfd_cfg["max_gap_pct"]:
         cfd_short += w["no_gap"]
-    if trend_short_days >= bonus["trend_maturity_days"]:
-        cfd_short += bonus["trend_maturity_pts"]
+    # Bonus-Punkte (gedeckelt auf max_bonus)
+    short_bonus = 0.0
+    if bonus["trend_maturity_days"] <= trend_short_days <= bonus.get("trend_overripe_days", 999):
+        short_bonus += bonus["trend_maturity_pts"]
     if vol_ratio >= bonus["vol_ratio_high"]:
-        cfd_short += bonus["vol_ratio_pts"]
-    if adx_val > bonus["adx_strong"]:
-        cfd_short += bonus["adx_strong_pts"]
+        short_bonus += bonus["vol_ratio_pts"]
     if not sq_on and squeeze_momentum < 0:
-        cfd_short += bonus["squeeze_fire_pts"]
+        short_bonus += bonus["squeeze_fire_pts"]
+    cfd_short += min(short_bonus, bonus.get("max_bonus", 1.0))
+    # Penalties: ueberreifer Trend oder ADX
+    if trend_short_days > bonus.get("trend_overripe_days", 999):
+        cfd_short += bonus.get("trend_overripe_penalty", 0)
+    if adx_val > cfd_cfg.get("adx_overripe", 99):
+        cfd_short += penalty.get("adx_overripe_pts", 0)
+    # Short Score-Cap (verhindert toxische High-Score-Shorts)
+    short_cap = cfd_cfg.get("short_score_cap", 99)
+    if cfd_short > short_cap:
+        cfd_short = short_cap
 
     # --- ATR-Gate + Trend-Reife-Filter ---
     if not cfd_atr_ok:
@@ -1142,7 +1164,7 @@ def build_cfd_table(cfd_long: list, cfd_short: list) -> str:
 </h2>
 <p class="c-muted" style="font-size:0.83em">
   Gewichteter Score &ge; {CFG["scoring"]["threshold"]:.0f}/{CFG["scoring"]["max_score"]:.0f} &nbsp;|&nbsp;
-  ADX+DI (2.0) · MA-Struktur (1.5) · EMA-Stack (1.5) · MACD (1.0) · RSI-Zone (1.0) · Vol (0.5) · Gap (0.5) + Bonus (2.0)
+  ADX+DI (2.0) · MA-Struktur (1.5) · EMA-Stack (1.5) · MACD (1.0) · RSI-Zone (1.0) · Vol (0.5) · Gap (0.5) + Bonus (max 1.0) · Penalties (ADX>45, Trend>15d) · Short-Cap 7.5 · TP2=2.0×ATR
   &nbsp;|&nbsp; Stop = {CFG["cfd"]["atr_stop_mult"]}×ATR &nbsp;|&nbsp; TP2 = {CFG["cfd"]["atr_tp2_mult"]}×ATR
 </p>
 <div class="table-wrap">
