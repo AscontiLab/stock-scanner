@@ -166,86 +166,73 @@
         </div>
     </div>
 
-    <!-- Buy / Sell Signals Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <!-- Buy Signals -->
-        {% if buy_rows %}
-        <div class="card p-5">
-            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span class="badge-buy px-2 py-1 rounded text-xs font-bold">BUY</span>
-                Kaufsignale
-                <span class="mono text-sm" style="color: var(--text-muted);">({{ buy_rows|length }})</span>
-            </h2>
-            <div class="overflow-x-auto">
-                <table>
-                    <thead>
-                        <tr>
-                            <th scope="col">Ticker</th>
-                            <th scope="col">Score</th>
-                            <th scope="col">Kurs</th>
-                            <th scope="col">%</th>
-                            <th scope="col">RSI</th>
-                            <th scope="col">Vol</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for r in buy_rows %}
-                        <tr>
-                            <td>
-                                <div class="font-semibold text-white">{{ r.ticker }}</div>
-                                <div class="text-xs" style="color: var(--text-dim);">{{ r.name|truncate(20) }}</div>
-                            </td>
-                            <td class="font-bold mono" style="color: var(--green);">+{{ r.net_score }}</td>
-                            <td class="mono text-sm">{{ r.price }}</td>
-                            <td class="mono text-sm {{ 'pnl-pos' if r.pct_change|float >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(r.pct_change|float) }}%</td>
-                            <td class="mono text-sm">{{ r.rsi }}</td>
-                            <td class="mono text-sm">{{ "%.1f"|format(r.vol_ratio|float) }}x</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+    <!-- Langfrist-Investments -->
+    <div class="card p-5 mb-6">
+        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span style="font-size: 1.2em;">&#x1F4C8;</span>
+            Langfrist-Investments
+            <span class="mono text-sm" style="color: var(--text-muted);">({{ longterm_rows|length }})</span>
+        </h2>
+        {% if longterm_rows %}
+        <div class="overflow-x-auto">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Aktie</th>
+                        <th scope="col">Markt</th>
+                        <th scope="col">Score</th>
+                        <th scope="col">Label</th>
+                        <th scope="col">Kurs</th>
+                        <th scope="col">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in longterm_rows %}
+                    {% set lt_score = r.longterm_score|default('0')|float %}
+                    {% set lt_label = r.longterm_label|default('—') %}
+                    <tr>
+                        <td>
+                            <div class="font-semibold text-white">{{ r.name|default(r.ticker)|truncate(25) }}</div>
+                            <div class="text-xs mono" style="color: var(--text-dim);">{{ r.ticker }}</div>
+                        </td>
+                        <td class="text-sm" style="color: var(--text-muted);">{{ r.market|default('') }}</td>
+                        <td>
+                            <div class="flex items-center gap-2">
+                                {% if lt_score >= 7 %}
+                                    {% set score_color = "var(--green)" %}
+                                {% elif lt_score >= 4 %}
+                                    {% set score_color = "var(--gold)" %}
+                                {% else %}
+                                    {% set score_color = "var(--text-muted)" %}
+                                {% endif %}
+                                <span class="font-bold mono" style="color: {{ score_color }};">{{ "%.1f"|format(lt_score) }}</span>
+                                <div class="score-bar w-14">
+                                    <div class="score-fill score-fill-gradient-green" style="width: {{ (lt_score / 10 * 100)|int }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-sm">
+                            {% if lt_label == 'Top-Pick' %}
+                                <span title="Top-Pick">&#x1F48E;</span>
+                            {% elif lt_label == 'Stark' %}
+                                <span title="Stark">&#x2B50;</span>
+                            {% elif lt_label == 'Solide' %}
+                                <span title="Solide">&#x2713;</span>
+                            {% else %}
+                                <span style="color: var(--text-dim);">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td class="mono text-sm">{{ r.price|default('—') }}</td>
+                        <td class="mono text-sm {{ 'pnl-pos' if r.pct_change|default('0')|float >= 0 else 'pnl-neg' }}">
+                            {{ "%.1f"|format(r.pct_change|default('0')|float) }}%
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        {% endif %}
-
-        <!-- Sell Signals -->
-        {% if sell_rows %}
-        <div class="card p-5">
-            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span class="badge-sell px-2 py-1 rounded text-xs font-bold">SELL</span>
-                Verkaufssignale
-                <span class="mono text-sm" style="color: var(--text-muted);">({{ sell_rows|length }})</span>
-            </h2>
-            <div class="overflow-x-auto">
-                <table>
-                    <thead>
-                        <tr>
-                            <th scope="col">Ticker</th>
-                            <th scope="col">Score</th>
-                            <th scope="col">Kurs</th>
-                            <th scope="col">%</th>
-                            <th scope="col">RSI</th>
-                            <th scope="col">Vol</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for r in sell_rows %}
-                        <tr>
-                            <td>
-                                <div class="font-semibold text-white">{{ r.ticker }}</div>
-                                <div class="text-xs" style="color: var(--text-dim);">{{ r.name|truncate(20) }}</div>
-                            </td>
-                            <td class="font-bold mono" style="color: var(--red);">{{ r.net_score }}</td>
-                            <td class="mono text-sm">{{ r.price }}</td>
-                            <td class="mono text-sm {{ 'pnl-pos' if r.pct_change|float >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(r.pct_change|float) }}%</td>
-                            <td class="mono text-sm">{{ r.rsi }}</td>
-                            <td class="mono text-sm">{{ "%.1f"|format(r.vol_ratio|float) }}x</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        {% else %}
+        <p class="text-sm" style="color: var(--text-dim);">Keine Langfrist-Daten im letzten Scan.</p>
         {% endif %}
     </div>
 

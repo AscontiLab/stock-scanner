@@ -1,4 +1,4 @@
-"""Signale-Seite: CFD Long/Short + Buy/Sell Tabellen."""
+"""Signale-Seite: CFD Long/Short + Langfrist-Investments."""
 
 import json
 from datetime import datetime
@@ -63,12 +63,13 @@ def _load_signals() -> dict:
     cfd_long.sort(key=lambda r: _safe_float(r.get("cfd_long_score")), reverse=True)
     cfd_short.sort(key=lambda r: _safe_float(r.get("cfd_short_score")), reverse=True)
 
-    # Trading Signals (Buy/Sell)
+    # Langfrist-Signale statt Buy/Sell
     all_rows = _read_csv(SCANNER_DIR / "trading_signals.csv")
-    buy_rows = [r for r in all_rows if _safe_int(r.get("net_score")) >= 4]
-    sell_rows = [r for r in all_rows if _safe_int(r.get("net_score")) <= -4]
-    buy_rows.sort(key=lambda r: _safe_int(r.get("net_score")), reverse=True)
-    sell_rows.sort(key=lambda r: _safe_int(r.get("net_score")))
+    longterm_rows = sorted(
+        all_rows,
+        key=lambda r: _safe_float(r.get("longterm_score")),
+        reverse=True,
+    )[:20]
 
     fear_greed = _get_fear_greed()
     scan_time = _get_scan_timestamp()
@@ -76,8 +77,7 @@ def _load_signals() -> dict:
     return {
         "cfd_long": cfd_long,
         "cfd_short": cfd_short,
-        "buy_rows": buy_rows[:20],
-        "sell_rows": sell_rows[:20],
+        "longterm_rows": longterm_rows,
         "fear_greed": fear_greed,
         "scan_time": scan_time,
     }

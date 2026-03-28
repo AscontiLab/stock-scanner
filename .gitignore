@@ -14,3 +14,4 @@ cfd_portfolio.json
 # Backup-Dumps explizit tracken
 !backup/
 !backup/*.sql
+*.json

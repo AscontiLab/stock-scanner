@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% set active_page = "stocks" %}
+{% block title %}Investment-Portfolio — Stock Scanner{% endblock %}
+
+{% block content %}
+<div x-data="stocksApp()" x-init="startAutoRefresh()">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold" style="color: var(--cyan);">
+            <span style="font-size: 1.1em;">&#x1F4CA;</span>
+            Investment-Portfolio
+            <span class="mono text-lg" style="color: var(--text-muted);">({{ stock_count }} Aktien)</span>
+        </h1>
+        <div class="flex items-center gap-3">
+            <span class="text-xs" style="color: var(--text-dim);" x-text="'Auto-Refresh: ' + countdown + 's'"></span>
+            <button class="btn-primary text-sm" @click="refresh()">Aktualisieren</button>
+        </div>
+    </div>
+
+    {% if stock_reports %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {% for p in stock_reports %}
+        <div class="card p-5" id="stock-{{ p.ticker }}">
+
+            <!-- Empfehlung Badge (prominent oben) -->
+            <div class="mb-4 text-center">
+                {% if p.rec_color == 'green' %}
+                    {% set badge_bg = "rgba(0, 255, 136, 0.12)" %}
+                    {% set badge_border = "rgba(0, 255, 136, 0.3)" %}
+                    {% set badge_text = "var(--green)" %}
+                {% elif p.rec_color == 'orange' %}
+                    {% set badge_bg = "rgba(255, 149, 0, 0.12)" %}
+                    {% set badge_border = "rgba(255, 149, 0, 0.3)" %}
+                    {% set badge_text = "var(--orange)" %}
+                {% elif p.rec_color == 'red' %}
+                    {% set badge_bg = "rgba(255, 59, 92, 0.12)" %}
+                    {% set badge_border = "rgba(255, 59, 92, 0.3)" %}
+                    {% set badge_text = "var(--red)" %}
+                {% else %}
+                    {% set badge_bg = "rgba(139, 155, 181, 0.12)" %}
+                    {% set badge_border = "rgba(139, 155, 181, 0.3)" %}
+                    {% set badge_text = "var(--text-muted)" %}
+                {% endif %}
+                <span class="inline-block px-5 py-2 rounded-xl text-sm font-bold tracking-wide"
+                    style="background: {{ badge_bg }}; color: {{ badge_text }}; border: 1px solid {{ badge_border }}; text-shadow: 0 0 12px {{ badge_bg }};">
+                    {{ p.recommendation }}
+                </span>
+            </div>
+
+            <!-- Header: Name + Ticker -->
+            <div class="flex items-center justify-between mb-3">
+                <div>
+                    <span class="text-xl font-bold text-white">{{ p.name|default(p.ticker) }}</span>
+                    <span class="ml-2 text-sm mono" style="color: var(--text-dim);">{{ p.ticker }}</span>
+                </div>
+                <span class="text-xs" style="color: var(--text-dim);">{{ p.market }}</span>
+            </div>
+
+            <!-- Kurs + Aenderung -->
+            <div class="flex items-baseline gap-4 mb-4">
+                {% if p.price is not none %}
+                <span class="text-3xl font-bold mono text-white">{{ "%.2f"|format(p.price|float) }}</span>
+                {% if p.pct_change is not none %}
+                <span class="text-lg mono {{ 'pnl-pos' if p.pct_change|float >= 0 else 'pnl-neg' }}">
+                    {{ "+" if p.pct_change|float >= 0 else "" }}{{ "%.1f"|format(p.pct_change|float) }}%
+                </span>
+                {% endif %}
+                {% else %}
+                <span class="text-lg" style="color: var(--text-dim);">Kein Kurs verfuegbar</span>
+                {% endif %}
+            </div>
+
+            <!-- Langfrist-Score -->
+            {% if p.longterm_score is not none %}
+            {% set lt_score = p.longterm_score|float %}
+            <div class="flex items-center gap-3 mb-4">
+                <span class="text-xs" style="color: var(--text-muted);">Langfrist-Score</span>
+                <div class="flex items-center gap-2">
+                    {% if lt_score >= 7 %}
+                        {% set score_color = "var(--green)" %}
+                    {% elif lt_score >= 4 %}
+                        {% set score_color = "var(--gold)" %}
+                    {% else %}
+                        {% set score_color = "var(--text-muted)" %}
+                    {% endif %}
+                    <span class="font-bold mono" style="color: {{ score_color }};">{{ "%.1f"|format(lt_score) }}</span>
+                    <div class="score-bar w-20">
+                        <div class="score-fill score-fill-gradient-green" style="width: {{ (lt_score / 10 * 100)|int }}%"></div>
+                    </div>
+                    {% if p.longterm_label %}
+                    <span class="text-sm">
+                        {% if p.longterm_label == 'Top-Pick' %}&#x1F48E;
+                        {% elif p.longterm_label == 'Stark' %}&#x2B50;
+                        {% elif p.longterm_label == 'Solide' %}&#x2713;
+                        {% endif %}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Warnungen Badge -->
+            <div class="flex items-center gap-2 mb-3">
+                <span class="text-xs" style="color: var(--text-muted);">Warnungen:</span>
+                {% if p.warning_count == 0 %}
+                <span class="px-2 py-0.5 rounded text-xs font-semibold"
+                    style="background: rgba(0, 255, 136, 0.15); color: var(--green); border: 1px solid rgba(0, 255, 136, 0.3);">
+                    {{ p.warning_count }}
+                </span>
+                {% elif p.warning_count <= 2 %}
+                <span class="px-2 py-0.5 rounded text-xs font-semibold"
+                    style="background: rgba(255, 149, 0, 0.15); color: var(--orange); border: 1px solid rgba(255, 149, 0, 0.3);">
+                    {{ p.warning_count }}
+                </span>
+                {% else %}
+                <span class="px-2 py-0.5 rounded text-xs font-semibold"
+                    style="background: rgba(255, 59, 92, 0.15); color: var(--red); border: 1px solid rgba(255, 59, 92, 0.3);">
+                    {{ p.warning_count }}
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- Warnungs-Details (Akkordeon) -->
+            {% if p.warnings %}
+            <div class="mb-3" x-data="{ open: false }">
+                <button @click="open = !open" :aria-expanded="open"
+                    class="w-full text-left text-xs px-3 py-2 rounded-lg flex items-center justify-between"
+                    style="background: rgba(255, 149, 0, 0.08); color: var(--orange); border: 1px solid rgba(255, 149, 0, 0.15);">
+                    <span>{{ p.warnings|length }} Warnung{{ 'en' if p.warnings|length != 1 }}</span>
+                    <span x-text="open ? '\u2212' : '+'" aria-hidden="true"></span>
+                </button>
+                <div class="accordion-content mt-2 space-y-1 px-2" :class="{ 'open': open }">
+                    {% for w in p.warnings %}
+                    <div class="text-xs flex items-start gap-1" style="color: var(--orange);">
+                        <span>&#9888;</span>
+                        <span>{{ w }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Entfernen-Button -->
+            <button class="btn-danger w-full text-sm"
+                @click="removeStock('{{ p.ticker }}', $el)">
+                Entfernen
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card p-12 text-center">
+        <p class="text-lg" style="color: var(--text-muted);">Noch keine Aktien im Portfolio.</p>
+        <p class="text-sm mt-2" style="color: var(--text-dim);">Fuege Aktien via CLI hinzu: <span class="mono">python3 stock_scanner.py --add-stock AAPL</span></p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function stocksApp() {
+    return {
+        countdown: 300,
+        timer: null,
+        startAutoRefresh() {
+            this.timer = setInterval(() => {
+                this.countdown--;
+                if (this.countdown <= 0) {
+                    window.location.reload();
+                }
+            }, 1000);
+        },
+        async removeStock(ticker, btn) {
+            if (!confirm('Aktie ' + ticker + ' wirklich aus dem Portfolio entfernen?')) return;
+            btn.disabled = true;
+            btn.textContent = 'Wird entfernt...';
+            try {
+                const resp = await fetch('/api/stocks/remove', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ticker: ticker})
+                });
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    console.error('Remove stock failed:', resp.status, err);
+                    btn.textContent = resp.status + ' Fehler';
+                    btn.title = err;
+                    btn.disabled = false;
+                    return;
+                }
+                const data = await resp.json();
+                if (data.ok) {
+                    const el = document.getElementById('stock-' + ticker);
+                    if (el) el.style.opacity = '0.3';
+                    btn.textContent = 'Entfernt';
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    btn.textContent = data.error || 'Fehler';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                console.error('Remove stock error:', e);
+                btn.textContent = 'Netzwerkfehler';
+                btn.title = e.message;
+                btn.disabled = false;
+            }
+        },
+        refresh() {
+            location.reload();
+        }
+    }
+}
+</script>
+{% endblock %}

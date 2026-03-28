@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from dashboard.config import settings
-from dashboard.routes import signals, portfolio, backtesting
+from dashboard.routes import signals, portfolio, backtesting, stocks
 
 app = FastAPI(title="Stock Scanner Dashboard", docs_url=None, redoc_url=None)
 
@@ -46,3 +46,4 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 app.include_router(signals.router)
 app.include_router(portfolio.router)
 app.include_router(backtesting.router)
+app.include_router(stocks.router)
