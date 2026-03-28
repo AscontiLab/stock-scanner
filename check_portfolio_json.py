@@ -1,18 +1,22 @@
 """Hilfsskript: CFD-Portfolio-Check als JSON auf stdout.
 
-Wird vom Unified Dashboard per subprocess aufgerufen, um sys.path-Konflikte zu vermeiden.
-Alle Debug-Ausgaben gehen auf stderr, nur das JSON-Ergebnis auf stdout.
+Wird vom Unified Dashboard per subprocess aufgerufen.
+Alle Print-Ausgaben werden auf stderr umgeleitet, nur JSON auf stdout.
 """
 import json
+import os
 import sys
 
-_print = print
-def print(*args, **kwargs):
-    kwargs.setdefault("file", sys.stderr)
-    _print(*args, **kwargs)
+# stdout auf stderr umleiten BEVOR irgendein Import passiert
+_real_stdout = os.fdopen(os.dup(1), "w")
+os.dup2(sys.stderr.fileno(), 1)
 
 from cfd_portfolio import list_positions, check_positions
 
 pos = list_positions()
 reports = check_positions(pos) if pos else []
-_print(json.dumps(reports), file=sys.stdout)
+
+# JSON auf den echten stdout schreiben
+_real_stdout.write(json.dumps(reports))
+_real_stdout.write("\n")
+_real_stdout.close()
