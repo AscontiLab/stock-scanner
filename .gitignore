@@ -7,6 +7,8 @@ __pycache__/
 *.html
 !dashboard/templates/*.html
 *.db
+*.db-shm
+*.db-wal
 *.lock
 .env
 cfd_portfolio.json
