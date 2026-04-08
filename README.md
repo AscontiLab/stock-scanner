@@ -125,3 +125,11 @@ In `.env` konfigurieren.
 ## Voraussetzungen
 
 Python 3.10+, Pakete: `yfinance`, `pandas`, `numpy`, `pyyaml`, `tqdm`, `requests`, `fastapi`, `uvicorn`, `jinja2`, `pydantic-settings`
+
+`scanner-common` wird als pip-Paket installiert (nicht mehr als lokale Kopie).
+
+## Betriebshinweise
+
+- `run_scanner.sh` nutzt `flock` mit Lock-Datei (`/tmp/stock_scanner.lock`) gegen parallele Laeufe
+- `run_resolve.sh` wartet max 30 Minuten auf den Scanner-Lock bevor es startet
+- `N8N_BASE_URL` ist per Env-Variable konfigurierbar (Fallback: `agents.umzwei.de`)
