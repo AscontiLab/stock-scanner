@@ -7,6 +7,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Warte bis der Stock Scanner fertig ist (max. 30 Minuten)
+LOCK_FILE="/tmp/stock_scanner.lock"
+if [ -f "$LOCK_FILE" ]; then
+    echo "Warte auf Stock Scanner (max. 30 Min.) ..."
+    exec 9<"$LOCK_FILE"
+    if ! flock --wait 1800 9; then
+        echo "FEHLER: Stock Scanner läuft nach 30 Min. immer noch — Abbruch."
+        exit 1
+    fi
+    flock -u 9
+    exec 9<&-
+    echo "Stock Scanner fertig — starte Resolve."
+fi
+
 DATE=$(date +%Y-%m-%d)
 LOG_DIR="$SCRIPT_DIR/logs"
 mkdir -p "$LOG_DIR"

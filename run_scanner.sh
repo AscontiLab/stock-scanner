@@ -3,10 +3,18 @@
 # Läuft täglich Mo–Fr nach US-Börsenschluss (via cron)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCK_FILE="/tmp/stock_scanner.lock"
 LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/scanner_$(date +%Y-%m-%d).log"
 
 mkdir -p "$LOG_DIR"
+
+# Verhindere parallele Läufe
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') Scanner läuft bereits — Abbruch." >> "$LOG_FILE"
+    exit 0
+fi
 
 echo "======================================" >> "$LOG_FILE"
 echo "Start: $(date '+%Y-%m-%d %H:%M:%S')"  >> "$LOG_FILE"
