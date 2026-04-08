@@ -3,7 +3,7 @@
 import json, sys, os, urllib.request
 sys.path.insert(0, os.path.dirname(__file__))
 
-N8N_BASE = "https://agents.umzwei.de"
+N8N_BASE = os.environ.get("N8N_BASE_URL", "https://agents.umzwei.de")
 
 
 def _post_json(path, data):

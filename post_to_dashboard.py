@@ -2,6 +2,7 @@
 """Sendet Stock-Scanner-Ergebnisse an n8n Dashboard Webhook."""
 
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +13,8 @@ from utils import safe_float as to_float
 from utils import safe_int as to_int
 from utils import read_csv as read_csv_safe
 
-N8N_WEBHOOK = "https://agents.umzwei.de/webhook/stock-update"
+_N8N_BASE = os.environ.get("N8N_BASE_URL", "https://agents.umzwei.de")
+N8N_WEBHOOK = f"{_N8N_BASE}/webhook/stock-update"
 HUB_DIR = Path(__file__).resolve().parent.parent / "hub"
 
 
