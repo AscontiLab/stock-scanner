@@ -41,6 +41,14 @@ n8n Dashboard: /webhook/stock-dashboard
 | `telegram_alerts.py` | Telegram: Signal-Alerts, Position-Alerts, Summary |
 | `run_scanner.sh` | Cron-Wrapper: Scanner + Dashboard-Push |
 | `run_resolve.sh` | Cron-Wrapper: Resolve + Portfolio-Check + Dashboard-Push |
+| `cfd_api.py` | REST-API fuer CFD-Operationen |
+| `investment_portfolio.py` | Investment-Portfolio Verwaltung |
+| `price_cache.py` | Kurs-Cache fuer schnellere Abfragen |
+| `utils.py` | Hilfsfunktionen (CSV, Labels, Formatter) |
+| `send_report.py` | E-Mail-Versand des HTML-Reports |
+| `check_portfolio_json.py` | Portfolio-JSON Validierung |
+| `check_stocks_json.py` | Stocks-JSON Validierung |
+| `backup_db.sh` | Datenbank-Backup Script |
 | `dashboard/` | FastAPI Dashboard (Port 8091, systemd) |
 
 ## Scoring
