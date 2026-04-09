@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from dashboard.config import settings
+from dashboard.earnings import get_upcoming_earnings, refresh_earnings_async
 
 logger = logging.getLogger("portfolio")
 
@@ -59,9 +60,18 @@ class ClosePositionRequest(BaseModel):
 @router.get("/portfolio", response_class=HTMLResponse)
 async def portfolio_page(request: Request):
     reports = _check_cached()
+
+    # Earnings-Warnungen fuer gehaltene Positionen
+    tickers = list({r["ticker"] for r in reports if r.get("ticker")})
+    earnings = get_upcoming_earnings(tickers, days_ahead=5) if tickers else {}
+    # Hintergrund-Refresh anstossen, falls Cache leer
+    if tickers and not earnings:
+        refresh_earnings_async(tickers, days_ahead=5)
+
     return templates.TemplateResponse("portfolio.html", {
         "request": request,
         "positions": reports,
+        "earnings": earnings,
     })
 
 

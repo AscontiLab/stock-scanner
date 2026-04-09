@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from dashboard.config import settings
+from dashboard.earnings import get_upcoming_earnings, refresh_earnings_async
 from utils import read_csv as _read_csv
 
 router = APIRouter()
@@ -65,10 +66,19 @@ async def stocks_page(request: Request):
     reports = _check_cached()
     mod = _get_portfolio_module()
     stock_count = len(mod.list_stocks())
+
+    # Earnings-Warnungen fuer gehaltene Aktien
+    tickers = list({r["ticker"] for r in reports if r.get("ticker")})
+    earnings = get_upcoming_earnings(tickers, days_ahead=5) if tickers else {}
+    # Hintergrund-Refresh anstossen, falls Cache leer
+    if tickers and not earnings:
+        refresh_earnings_async(tickers, days_ahead=5)
+
     return templates.TemplateResponse("stocks.html", {
         "request": request,
         "stock_reports": reports,
         "stock_count": stock_count,
+        "earnings": earnings,
     })
 
 

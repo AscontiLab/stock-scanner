@@ -32,7 +32,7 @@ from indicators.technical import (
 )
 from scoring.cfd_scorer import compute_cfd_scores, compute_cfd_levels
 from scoring.longterm_scorer import compute_longterm_score
-from scoring.fear_greed import get_fear_greed, compute_fg_multiplier
+from scoring.fear_greed import get_fear_greed, compute_fg_multiplier, compute_fg_cfd_bonus
 from tickers.sources import (
     TICKER_SOURCES, filter_valid_tickers,
     get_nasdaq100_tickers, get_sp500_tickers, get_dax40_tickers,
@@ -535,25 +535,35 @@ def main():
     for r in longterm_rows[:5]:
         print(f"  {r['name']:25s}  Score={r['longterm_score']:.1f}  {r['longterm_label']}")
 
-    # --- Fear & Greed Multiplikator ---
+    # --- Fear & Greed CFD Score-Bonus (Contrarian-Ansatz) ---
     fg_value = fear_greed.get("value", 50)
-    fg_long_m, fg_short_m = compute_fg_multiplier(fg_value)
+    fg_bonus = compute_fg_cfd_bonus(fg_value)
     for r in results:
         r["cfd_long_score_raw"] = r["cfd_long_score"]
         r["cfd_short_score_raw"] = r["cfd_short_score"]
-        r["cfd_long_score"] = round(min(r["cfd_long_score"] * fg_long_m, 10.0), 1)
-        r["cfd_short_score"] = round(min(r["cfd_short_score"] * fg_short_m, 10.0), 1)
-    print(f"\nF&G Multiplikator: Long x{fg_long_m}, Short x{fg_short_m} (F&G={fg_value})")
+        # Additiver Bonus: nur auf Scores > 0 anwenden (keine toten Signale aufwecken)
+        if r["cfd_long_score"] > 0:
+            r["cfd_long_score"] = round(max(0, min(r["cfd_long_score"] + fg_bonus["long_bonus"], 10.0)), 1)
+        if r["cfd_short_score"] > 0:
+            r["cfd_short_score"] = round(max(0, min(r["cfd_short_score"] + fg_bonus["short_bonus"], 10.0)), 1)
+        # F&G-Bonus pro Signal speichern (fuer Dashboard-Anzeige)
+        r["fg_long_bonus"] = fg_bonus["long_bonus"] if r["cfd_long_score_raw"] > 0 else 0.0
+        r["fg_short_bonus"] = fg_bonus["short_bonus"] if r["cfd_short_score_raw"] > 0 else 0.0
+        r["fg_zone"] = fg_bonus["zone"]
+    print(f"\nF&G Score-Bonus: Long {fg_bonus['long_bonus']:+.1f}, Short {fg_bonus['short_bonus']:+.1f} "
+          f"(F&G={fg_value}, Zone={fg_bonus['zone']})")
 
-    # --- CFD Setups ---
-    cfd_threshold = CFG["scoring"]["threshold"]
+    # --- CFD Setups (mit F&G-adjustiertem Threshold) ---
+    cfd_threshold_base = CFG["scoring"]["threshold"]
+    cfd_threshold_long = cfd_threshold_base + fg_bonus["threshold_long_adj"]
+    cfd_threshold_short = cfd_threshold_base + fg_bonus["threshold_short_adj"]
     cfd_top_n = CFG["cfd"]["top_n"]
-    cfd_long_rows = sorted([r for r in results if r["cfd_long_score"] >= cfd_threshold],
+    cfd_long_rows = sorted([r for r in results if r["cfd_long_score"] >= cfd_threshold_long],
                            key=lambda r: r["cfd_long_score"], reverse=True)[:cfd_top_n]
-    cfd_short_rows = sorted([r for r in results if r["cfd_short_score"] >= cfd_threshold],
+    cfd_short_rows = sorted([r for r in results if r["cfd_short_score"] >= cfd_threshold_short],
                             key=lambda r: r["cfd_short_score"], reverse=True)[:cfd_top_n]
-    print(f"\nCFD Long Setups:   {len(cfd_long_rows)} (Threshold >= {cfd_threshold}, Top {cfd_top_n})")
-    print(f"CFD Short Setups:  {len(cfd_short_rows)}")
+    print(f"\nCFD Long Setups:   {len(cfd_long_rows)} (Threshold >= {cfd_threshold_long}, Top {cfd_top_n})")
+    print(f"CFD Short Setups:  {len(cfd_short_rows)} (Threshold >= {cfd_threshold_short})")
 
     print("\nTOP 5 CFD LONG:")
     for r in cfd_long_rows[:5]:

@@ -182,7 +182,14 @@ def build_cfd_row(row: dict, direction: str, cfg: dict) -> str:
 
     max_s = cfg["scoring"]["max_score"]
     score_cls = "c-score-best" if score >= 7.0 else "c-score-good" if score >= 6.0 else "c-score-mid" if score >= 5.0 else "c-muted"
-    score_display = f"{score:.1f}/{max_s:.0f}"
+    # F&G-Bonus anzeigen (falls vorhanden)
+    fg_bonus_key = f"fg_{direction}_bonus"
+    fg_bonus_val = row.get(fg_bonus_key, 0.0)
+    fg_hint = ""
+    if fg_bonus_val != 0:
+        fg_color = "#27ae60" if fg_bonus_val > 0 else "#e74c3c"
+        fg_hint = f' <span style="color:{fg_color};font-size:0.8em" title="F&G Bonus ({row.get("fg_zone", "")})">{fg_bonus_val:+.1f}</span>'
+    score_display = f"{score:.1f}/{max_s:.0f}{fg_hint}"
     gap_html = (
         f'<span class="c-red bold">{row["recent_max_gap"]}% ⚠</span>'
         if row["recent_max_gap"] >= 5

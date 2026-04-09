@@ -1,6 +1,8 @@
-"""Signale-Seite: CFD Long/Short + Langfrist-Investments."""
+"""Signale-Seite: CFD Long/Short + Langfrist-Investments + Sektor-Heatmap."""
 
 import json
+import logging
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -14,10 +16,15 @@ from utils import safe_int as _safe_int
 from utils import read_csv as _read_csv
 from utils import fg_label
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
 
 SCANNER_DIR = settings.SCANNER_DIR
+SECTOR_CACHE_PATH = Path(__file__).parent.parent / "data" / "sector_cache.json"
+# Sektor-Cache ist 24h gueltig
+SECTOR_CACHE_TTL = 86400
 
 
 def _get_scan_timestamp() -> str:
@@ -52,6 +59,155 @@ def _get_fear_greed() -> dict:
     return {"value": 50, "label": "Neutral (Fallback)"}
 
 
+def _load_sector_cache() -> dict:
+    """Laedt den Sektor-Cache aus JSON. Gibt leeres Dict zurueck wenn nicht vorhanden."""
+    if SECTOR_CACHE_PATH.exists():
+        try:
+            with open(SECTOR_CACHE_PATH, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    return {}
+
+
+def _save_sector_cache(cache: dict) -> None:
+    """Speichert den Sektor-Cache als JSON."""
+    SECTOR_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(SECTOR_CACHE_PATH, "w") as f:
+        json.dump(cache, f, indent=2)
+
+
+def _compute_sector_heatmap() -> list[dict]:
+    """Berechnet Sektor-Performance aus den neuesten Scan-Daten.
+
+    Liest all_results.csv, ermittelt Sektoren via yfinance (mit Cache),
+    und gruppiert die Daten nach Sektoren.
+    """
+    # Neuestes Output-Verzeichnis finden
+    output_dir = SCANNER_DIR / "output"
+    if not output_dir.exists():
+        return []
+    dirs = sorted([d for d in output_dir.iterdir() if d.is_dir()], reverse=True)
+    if not dirs:
+        return []
+
+    csv_path = dirs[0] / "all_results.csv"
+    if not csv_path.exists():
+        return []
+
+    rows = _read_csv(csv_path)
+    if not rows:
+        return []
+
+    # Sektor-Cache laden und pruefen ob er aktuell ist
+    cache = _load_sector_cache()
+    cache_ts = cache.get("_timestamp", 0)
+    cache_stale = (time.time() - cache_ts) > SECTOR_CACHE_TTL
+    cache_mapping = cache.get("sectors", {})
+
+    # Ticker ohne Sektor-Info sammeln
+    tickers_to_lookup = []
+    if cache_stale:
+        # Bei abgelaufenem Cache alle Ticker pruefen
+        tickers_to_lookup = [r["ticker"] for r in rows if r.get("ticker")]
+    else:
+        # Nur neue Ticker nachschlagen
+        tickers_to_lookup = [
+            r["ticker"] for r in rows
+            if r.get("ticker") and r["ticker"] not in cache_mapping
+        ]
+
+    # Fehlende Sektoren via yfinance abrufen (im Background wenn viele fehlen)
+    if tickers_to_lookup:
+        if len(tickers_to_lookup) > 20:
+            # Zu viele Ticker — im Background-Thread laden, Seite nicht blockieren
+            import threading
+            def _bg_fetch():
+                try:
+                    import yfinance as yf
+                    for t in tickers_to_lookup:
+                        try:
+                            info = yf.Ticker(t).info
+                            cache_mapping[t] = info.get("sector", "Unbekannt")
+                        except Exception:
+                            cache_mapping[t] = "Unbekannt"
+                    _save_sector_cache({"_timestamp": time.time(), "sectors": cache_mapping})
+                except Exception:
+                    pass
+            threading.Thread(target=_bg_fetch, daemon=True).start()
+            # Mit vorhandenen Cache-Daten weiterarbeiten (oder leer)
+            if not cache_mapping:
+                return []
+        else:
+            try:
+                import yfinance as yf
+                for ticker in tickers_to_lookup:
+                    try:
+                        info = yf.Ticker(ticker).info
+                        sector = info.get("sector", "Unbekannt")
+                        cache_mapping[ticker] = sector
+                    except Exception:
+                        cache_mapping[ticker] = "Unbekannt"
+            except ImportError:
+                logger.warning("yfinance nicht installiert — Sektor-Daten nicht verfuegbar")
+                return []
+            _save_sector_cache({"_timestamp": time.time(), "sectors": cache_mapping})
+
+    # Daten nach Sektoren gruppieren
+    sector_data: dict[str, dict] = {}
+    for row in rows:
+        ticker = row.get("ticker", "")
+        sector = cache_mapping.get(ticker, "Unbekannt")
+        if sector not in sector_data:
+            sector_data[sector] = {
+                "sector": sector,
+                "pct_changes": [],
+                "rsi_values": [],
+                "buy_count": 0,
+                "sell_count": 0,
+                "count": 0,
+            }
+
+        sd = sector_data[sector]
+        sd["count"] += 1
+
+        pct = _safe_float(row.get("pct_change", "0"))
+        sd["pct_changes"].append(pct)
+
+        rsi = _safe_float(row.get("rsi", "0"))
+        if rsi > 0:
+            sd["rsi_values"].append(rsi)
+
+        buy_sig = _safe_int(row.get("buy_signals", "0"))
+        sell_sig = _safe_int(row.get("sell_signals", "0"))
+        if buy_sig > sell_sig:
+            sd["buy_count"] += 1
+        elif sell_sig > buy_sig:
+            sd["sell_count"] += 1
+
+    # Ergebnis-Liste aufbauen
+    result = []
+    for sector, sd in sector_data.items():
+        avg_pct = sum(sd["pct_changes"]) / len(sd["pct_changes"]) if sd["pct_changes"] else 0
+        avg_rsi = sum(sd["rsi_values"]) / len(sd["rsi_values"]) if sd["rsi_values"] else 0
+        total_signals = sd["buy_count"] + sd["sell_count"]
+        buy_ratio = (sd["buy_count"] / total_signals * 100) if total_signals > 0 else 50
+
+        result.append({
+            "sector": sector,
+            "avg_pct_change": round(avg_pct, 2),
+            "avg_rsi": round(avg_rsi, 1),
+            "count": sd["count"],
+            "buy_count": sd["buy_count"],
+            "sell_count": sd["sell_count"],
+            "buy_ratio": round(buy_ratio, 0),
+        })
+
+    # Sortieren nach durchschnittlicher Kursaenderung (beste oben)
+    result.sort(key=lambda x: x["avg_pct_change"], reverse=True)
+    return result
+
+
 def _load_signals() -> dict:
     """Laedt alle Signal-Daten fuer die Anzeige."""
     # CFD Setups (Root-Level-Kopie)
@@ -74,12 +230,20 @@ def _load_signals() -> dict:
     fear_greed = _get_fear_greed()
     scan_time = _get_scan_timestamp()
 
+    # Sektor-Heatmap berechnen
+    try:
+        sector_heatmap = _compute_sector_heatmap()
+    except Exception as e:
+        logger.error("Sektor-Heatmap Fehler: %s", e)
+        sector_heatmap = []
+
     return {
         "cfd_long": cfd_long,
         "cfd_short": cfd_short,
         "longterm_rows": longterm_rows,
         "fear_greed": fear_greed,
         "scan_time": scan_time,
+        "sector_heatmap": sector_heatmap,
     }
 
 

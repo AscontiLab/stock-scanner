@@ -48,6 +48,15 @@
                 </span>
             </div>
 
+            <!-- Earnings-Warnung -->
+            {% if earnings.get(p.ticker) %}
+            {% set earn = earnings[p.ticker] %}
+            <div class="mb-3 px-3 py-2 rounded-lg text-sm font-semibold text-center"
+                style="background: rgba(255, 165, 0, 0.10); border: 1px solid rgba(255, 165, 0, 0.35); color: #ffa500;">
+                &#9888; Earnings in {{ earn.days_until }} Tag{{ 'en' if earn.days_until != 1 }} ({{ earn.date }})
+            </div>
+            {% endif %}
+
             <!-- Header: Name + Ticker -->
             <div class="flex items-center justify-between mb-3">
                 <div>

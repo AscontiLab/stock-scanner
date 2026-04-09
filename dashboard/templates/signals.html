@@ -43,6 +43,63 @@
         </div>
     </div>
 
+    <!-- Sektor-Heatmap -->
+    {% if sector_heatmap %}
+    <div class="card p-5 mb-6">
+        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span style="color: var(--gold);">&#x25A6;</span>
+            Sektor-Heatmap
+            <span class="mono text-sm" style="color: var(--text-muted);">
+                ({{ sector_heatmap|length }} Sektoren)
+            </span>
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {% for s in sector_heatmap %}
+            {% set pct = s.avg_pct_change %}
+            {% if pct >= 0 %}
+                {% set tint = "rgba(0, 255, 136, " ~ ([pct * 0.06, 0.25]|min) ~ ")" %}
+                {% set pct_color = "var(--green)" %}
+            {% else %}
+                {% set tint = "rgba(255, 59, 92, " ~ ([(pct|abs) * 0.06, 0.25]|min) ~ ")" %}
+                {% set pct_color = "var(--red)" %}
+            {% endif %}
+            <div class="rounded-xl p-4 border transition-all duration-200"
+                 style="background: {{ tint }}; border-color: rgba(255,255,255,0.06);
+                        backdrop-filter: blur(12px);">
+                <!-- Sektorname + Ticker-Anzahl -->
+                <div class="flex items-start justify-between mb-2">
+                    <span class="text-sm font-semibold text-white leading-tight"
+                          style="max-width: 70%;">{{ s.sector }}</span>
+                    <span class="mono text-xs px-1.5 py-0.5 rounded"
+                          style="color: var(--text-muted); background: rgba(255,255,255,0.05);">
+                        {{ s.count }}
+                    </span>
+                </div>
+                <!-- Durchschnittliche Kursaenderung -->
+                <div class="mono text-xl font-bold mb-2" style="color: {{ pct_color }};">
+                    {{ "%.2f"|format(pct) }}%
+                </div>
+                <!-- RSI -->
+                <div class="text-xs mb-2" style="color: var(--text-dim);">
+                    RSI <span class="mono">{{ "%.0f"|format(s.avg_rsi) }}</span>
+                </div>
+                <!-- Buy/Sell-Ratio Bar -->
+                <div class="flex items-center gap-2">
+                    <span class="text-xs" style="color: var(--green);">{{ s.buy_count }}B</span>
+                    <div class="flex-1 h-1.5 rounded-full overflow-hidden"
+                         style="background: rgba(255,59,92,0.3);">
+                        <div class="h-full rounded-full"
+                             style="width: {{ s.buy_ratio }}%;
+                                    background: var(--green);"></div>
+                    </div>
+                    <span class="text-xs" style="color: var(--red);">{{ s.sell_count }}S</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- CFD Setups Grid: Long + Short nebeneinander -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <!-- CFD Long Setups -->
@@ -71,6 +128,7 @@
                     <tbody>
                         {% for r in cfd_long %}
                         {% set score_val = r.cfd_long_score|float %}
+                        {% set fg_bonus_val = r.fg_long_bonus|default(0)|float %}
                         <tr>
                             <td>
                                 <div class="font-semibold text-white">{{ r.ticker }}</div>
@@ -82,6 +140,9 @@
                                     <div class="score-bar w-14">
                                         <div class="score-fill score-fill-gradient-green" style="width: {{ (score_val / 10 * 100)|int }}%"></div>
                                     </div>
+                                    {% if fg_bonus_val != 0 %}
+                                    <span class="text-xs mono px-1 rounded" style="color: {{ 'var(--green)' if fg_bonus_val > 0 else 'var(--red)' }}; background: rgba(255,255,255,0.05);" title="F&G Bonus ({{ r.fg_zone|default('') }})">{{ "%+.1f"|format(fg_bonus_val) }}</span>
+                                    {% endif %}
                                 </div>
                             </td>
                             <td class="mono text-sm">{{ r.price }}</td>
@@ -131,6 +192,7 @@
                     <tbody>
                         {% for r in cfd_short %}
                         {% set score_val = r.cfd_short_score|float %}
+                        {% set fg_bonus_val = r.fg_short_bonus|default(0)|float %}
                         <tr>
                             <td>
                                 <div class="font-semibold text-white">{{ r.ticker }}</div>
@@ -142,6 +204,9 @@
                                     <div class="score-bar w-14">
                                         <div class="score-fill score-fill-gradient-red" style="width: {{ (score_val / 10 * 100)|int }}%"></div>
                                     </div>
+                                    {% if fg_bonus_val != 0 %}
+                                    <span class="text-xs mono px-1 rounded" style="color: {{ 'var(--green)' if fg_bonus_val > 0 else 'var(--red)' }}; background: rgba(255,255,255,0.05);" title="F&G Bonus ({{ r.fg_zone|default('') }})">{{ "%+.1f"|format(fg_bonus_val) }}</span>
+                                    {% endif %}
                                 </div>
                             </td>
                             <td class="mono text-sm">{{ r.price }}</td>
