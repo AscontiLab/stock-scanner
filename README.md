@@ -105,9 +105,28 @@ python3 write_dashboard_data.py       # Portfolio + BT an n8n pushen
 Erreichbar unter `https://agents.umzwei.de/webhook/stock-dashboard`
 
 Drei Tabs:
-- **Signale**: CFD Long/Short nebeneinander, Gradient Score-Bars, Fear & Greed mit Pulsing, +Position Button
-- **Portfolio**: Prominente Empfehlungs-Badge (HALTEN/BEOBACHTEN/SCHLIESSEN), Trailing-Stop-Fortschrittsbalken, Gesamt-P&L, aufklappbare Warnungen
+- **Signale**: CFD Long/Short nebeneinander, Gradient Score-Bars, Fear & Greed mit Pulsing, +Position Button, Sektor-Heatmap
+- **Portfolio**: Prominente Empfehlungs-Badge (HALTEN/BEOBACHTEN/SCHLIESSEN), Trailing-Stop-Fortschrittsbalken, Gesamt-P&L, aufklappbare Warnungen, Earnings-Banner
 - **Backtesting**: Win-Rate, Avg R, Total R, Score-Bereich-Analyse, nach Richtung/Markt, Outcome-Bars, letzte aufgeloeste Signale
+
+## Sektor-Heatmap (2026-04-09)
+
+- Grid auf der Signale-Seite zeigt Sektor-Performance (avg % Change, RSI, Buy/Sell Ratio)
+- Daten via yfinance mit 24h JSON-Cache
+- Background-Loading beim ersten Aufruf
+
+## Earnings-Warnung (2026-04-09)
+
+- Orange Banner auf Portfolio- und Stocks-Karten wenn Earnings in den naechsten 5 Tagen anstehen
+- 6h In-Memory-Cache
+- Nur fuer Portfolio-Aktien, nicht fuer alle gescannten
+
+## Fear & Greed CFD-Filter (2026-04-09)
+
+- Additiver Score-Bonus ±0.5 bei extremem Marktsentiment
+- Extreme Fear (<25): Long +0.5, Short -0.5
+- Extreme Greed (>75): umgekehrt
+- Badge im Dashboard sichtbar
 
 FastAPI-Dashboard laeuft zusaetzlich auf Port 8091 (systemd Service `stock-dashboard`).
 
