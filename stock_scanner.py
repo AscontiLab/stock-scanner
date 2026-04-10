@@ -138,7 +138,7 @@ logging.basicConfig(
 # Core analysis function
 # ---------------------------------------------------------------------------
 
-def analyze_ticker(ticker: str, market: str) -> dict | None:
+def analyze_ticker(ticker: str, market: str, enforce_liquidity: bool = True) -> dict | None:
     """Download data and compute all signals. Returns result dict or None."""
     try:
         if _USE_PRICE_CACHE:
@@ -179,7 +179,7 @@ def analyze_ticker(ticker: str, market: str) -> dict | None:
 
     # --- Mindest-Liquiditaet ---
     avg_vol_20 = float(volume.rolling(20).mean().iloc[-1])
-    if avg_vol_20 < MIN_AVG_VOLUME:
+    if enforce_liquidity and avg_vol_20 < MIN_AVG_VOLUME:
         return None
 
     # --- Indikatoren berechnen ---

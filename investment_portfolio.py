@@ -140,10 +140,21 @@ def check_stocks(stocks: list[dict], scan_results: list[dict]) -> list[dict]:
     scan_results = [_clean(r) for r in scan_results if r]
     result_map = {r["ticker"]: r for r in scan_results if "ticker" in r}
 
+    def _portfolio_result(stock: dict) -> dict | None:
+        """Fallback fuer gehaltene Aktien, die wegen Scanner-Filtern nicht im CSV gelandet sind."""
+        try:
+            from stock_scanner import analyze_ticker
+            return analyze_ticker(stock["ticker"], stock.get("market", ""), enforce_liquidity=False)
+        except Exception:
+            return None
+
     reports = []
     for stock in stocks:
         ticker = stock["ticker"]
         result = result_map.get(ticker)
+
+        if result is None:
+            result = _portfolio_result(stock)
 
         # Aktie im Portfolio aber nicht gescannt -> ueberspringe mit Hinweis
         if result is None:

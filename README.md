@@ -152,3 +152,11 @@ Python 3.10+, Pakete: `yfinance`, `pandas`, `numpy`, `pyyaml`, `tqdm`, `requests
 - `run_scanner.sh` nutzt `flock` mit Lock-Datei (`/tmp/stock_scanner.lock`) gegen parallele Laeufe
 - `run_resolve.sh` wartet max 30 Minuten auf den Scanner-Lock bevor es startet
 - `N8N_BASE_URL` ist per Env-Variable konfigurierbar (Fallback: `agents.umzwei.de`)
+
+## Investment-Portfolio Fallback (2026-04-10)
+
+- Der normale Scanner verwirft illiquide Titel weiterhin fuer **neue Trading-Signale** via `MIN_AVG_VOLUME`
+- Fuer gehaltene Aktien im Bereich `/dashboard/stock/stocks` gilt jetzt eine andere Logik:
+  - wenn ein Titel nicht in `all_results.csv` auftaucht, wird er fuer die Portfolio-Ansicht direkt nachanalysiert
+  - dabei wird der Liquiditaetsfilter bewusst **nicht** erzwungen
+- Dadurch erscheinen Bestandswerte wie `VBK.DE` / VERBIO auch dann mit Daten und Warnhinweisen, wenn sie fuer den Signal-Scanner zu illiquide waeren
