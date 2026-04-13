@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from indicators.technical import compute_adx, compute_atr, compute_macd, compute_rsi
 
 PORTFOLIO_PATH = Path(__file__).parent / "cfd_portfolio.json"
 
@@ -178,7 +179,6 @@ def _lookup_levels(ticker: str, direction: str) -> tuple:
     current = float(close.iloc[-1])
 
     # ATR(14) berechnen
-    from stock_scanner import compute_atr
     atr_val = float(compute_atr(high, low, close).iloc[-1])
 
     if direction == "long":
@@ -375,18 +375,15 @@ def _check_single_position(pos: dict) -> dict:
     ema21_val = float(ema21.iloc[-1])
 
     # RSI
-    from stock_scanner import compute_rsi
     rsi = compute_rsi(close)
     rsi_val = float(rsi.iloc[-1])
 
     # MACD
-    from stock_scanner import compute_macd
     macd_line, macd_signal_line, hist = compute_macd(close)
     curr_hist = float(hist.iloc[-1])
     prev_hist = float(hist.iloc[-2]) if len(hist) > 1 else 0
 
     # ADX
-    from stock_scanner import compute_adx
     adx_s, plus_di_s, minus_di_s = compute_adx(high, low, close)
     adx_val = float(adx_s.iloc[-1])
     plus_di = float(plus_di_s.iloc[-1])
