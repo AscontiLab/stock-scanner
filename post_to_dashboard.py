@@ -58,6 +58,22 @@ def _stock_explainability(signal: dict, direction: str | None = None) -> dict:
     risk_flags = []
     invalidators = []
     drivers = []
+    learning_flags = []
+    rules_summary = []
+
+    raw_components = signal.get(f"cfd_{side}_components", {}) if side in ("long", "short") else {}
+    raw_penalties = signal.get(f"cfd_{side}_penalties", {}) if side in ("long", "short") else {}
+
+    if isinstance(raw_components, str):
+        try:
+            raw_components = json.loads(raw_components)
+        except Exception:
+            raw_components = {}
+    if isinstance(raw_penalties, str):
+        try:
+            raw_penalties = json.loads(raw_penalties)
+        except Exception:
+            raw_penalties = {}
 
     if signal.get("ma") and signal.get("ma") != "neutral":
         why_now.append(f"MA-Struktur ist aktuell {signal.get('ma')}.")
@@ -81,6 +97,67 @@ def _stock_explainability(signal: dict, direction: str | None = None) -> dict:
     if signal.get("trend_short_days") and side == "short":
         confidence_reason.append(f"Short-Trendstruktur haelt seit {to_int(signal.get('trend_short_days'))} Tagen.")
 
+    if raw_penalties.get("gap_hard"):
+        learning_flags.append({
+            "code": "gap_hard",
+            "label": "Gap > 6%",
+            "impact": raw_penalties["gap_hard"],
+            "kind": "penalty",
+        })
+        rules_summary.append("Hartes Gap-Filter aktiv")
+    elif raw_penalties.get("gap_soft"):
+        learning_flags.append({
+            "code": "gap_soft",
+            "label": "Gap 4-6%",
+            "impact": raw_penalties["gap_soft"],
+            "kind": "penalty",
+        })
+        rules_summary.append("Gap-Regime dämpft den Score")
+
+    if raw_penalties.get("atr_high"):
+        learning_flags.append({
+            "code": "atr_high",
+            "label": "ATR >= 3%",
+            "impact": raw_penalties["atr_high"],
+            "kind": "penalty",
+        })
+        rules_summary.append("Hohes ATR-Regime vorsichtiger bewertet")
+
+    if raw_penalties.get("short_bias"):
+        learning_flags.append({
+            "code": "short_bias",
+            "label": "Short-Bias",
+            "impact": raw_penalties["short_bias"],
+            "kind": "penalty",
+        })
+        rules_summary.append("Shorts werden historisch skeptischer bewertet")
+
+    market_adj = raw_penalties.get("market_adjustment", 0)
+    if market_adj:
+        learning_flags.append({
+            "code": "market_adjustment",
+            "label": f"Marktfilter {signal.get('market', '?')}",
+            "impact": market_adj,
+            "kind": "penalty" if market_adj < 0 else "bonus",
+        })
+        rules_summary.append(f"Marktfilter fuer {signal.get('market', '?')} aktiv")
+
+    if raw_components.get("bonus_trend_maturity"):
+        learning_flags.append({
+            "code": "trend_maturity_bonus",
+            "label": "Trend-Reife",
+            "impact": raw_components["bonus_trend_maturity"],
+            "kind": "bonus",
+        })
+
+    if raw_components.get("bonus_squeeze_fire"):
+        learning_flags.append({
+            "code": "squeeze_fire_bonus",
+            "label": "Squeeze Fire",
+            "impact": raw_components["bonus_squeeze_fire"],
+            "kind": "bonus",
+        })
+
     if stop is not None:
         invalidators.append(f"Setup verliert seine Gueltigkeit unter/ueber dem Stop-Level {stop}.")
     if tp1 is not None and tp2 is not None:
@@ -93,10 +170,13 @@ def _stock_explainability(signal: dict, direction: str | None = None) -> dict:
         confidence_reason.append("Der Score wird aus technischen Faktoren, Trendfiltern und Volumenbestaetigung abgeleitet.")
     if not risk_flags:
         risk_flags.append("Schnelle Marktregimewechsel koennen das Setup trotz gutem Score entwerten.")
+    if not rules_summary:
+        rules_summary.append("Keine datenbasierten Sonderregeln aktiv; Basisscore ohne starke Dämpfer.")
 
     title_side = "Long" if side == "long" else "Short" if side == "short" else "Buy" if side == "buy" else "Sell"
     return {
         "summary": f"{signal.get('ticker', '?')} zeigt ein {title_side}-Setup mit Score {score_val:.1f}.",
+        "rules_summary": rules_summary,
         "why_now": why_now,
         "model_basis": [
             "Technische Faktoren: RSI, MACD, MA-Struktur, Bollinger, Volumen, Candlestick, VWAP, Squeeze",
@@ -106,7 +186,8 @@ def _stock_explainability(signal: dict, direction: str | None = None) -> dict:
         "risk_flags": risk_flags,
         "invalidators": invalidators,
         "drivers": drivers,
-        "version": "v1",
+        "learning_flags": learning_flags,
+        "version": "v2",
     }
 
 
@@ -130,6 +211,7 @@ def _normalize_stock_signal(signal: dict, date_str: str, direction: str | None =
         "atr_pct": round(to_float(signal.get("atr_pct")), 2),
         "fear_greed": signal.get("fear_greed"),
     }
+    explainability = _stock_explainability(signal, direction)
     return {
         "signal_id": _stock_signal_id(signal, date_str, direction),
         "run_id": f"stock-{date_str}",
@@ -150,8 +232,9 @@ def _normalize_stock_signal(signal: dict, date_str: str, direction: str | None =
             "event_time": f"{date_str}T00:00:00Z",
             "expires_at": f"{date_str}T23:59:59Z",
         },
+        "reason": " | ".join(explainability.get("rules_summary", [])[:2]),
         "metrics": metrics,
-        "explainability": _stock_explainability(signal, direction),
+        "explainability": explainability,
     }
 
 

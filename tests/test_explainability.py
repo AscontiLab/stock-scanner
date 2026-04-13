@@ -32,9 +32,10 @@ def test_normalize_stock_signal_builds_explainability_payload():
     assert signal["priority"] == 75
     assert signal["entity"]["side"] == "long"
     assert signal["metrics"]["fear_greed"] == 44
-    assert signal["explainability"]["version"] == "v1"
+    assert signal["explainability"]["version"] == "v2"
     assert signal["explainability"]["why_now"]
     assert signal["explainability"]["drivers"]
+    assert signal["explainability"]["rules_summary"]
 
 
 def test_write_hub_exports_preserves_other_systems(tmp_path):

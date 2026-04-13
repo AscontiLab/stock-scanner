@@ -10,7 +10,7 @@ Taeglicher Aktien- und CFD-Scanner fuer kurzfristige Trading-Signale. Bewertet 6
 stock_scanner.py (Mo-Fr 22:30 UTC)
   ├── 667 Ticker scannen (yfinance)
   ├── Indikatoren: ADX, RSI, MACD, SMA/EMA, Bollinger, ATR, Volume
-  ├── Gewichtetes Scoring (0-10, konfigurierbar)
+  ├── Gewichtetes Scoring (0-10, konfigurierbar, mit lernbasierten Penalties)
   ├── CFD-Setups: Stop/TP1/TP2 via ATR-Multiplikatoren
   ├── Output: CSV + HTML nach output/YYYY-MM-DD/
   ├── Backtesting-DB: cfd_backtesting.db
@@ -23,9 +23,9 @@ run_resolve.sh (Mo-Fr 23:00 UTC)
   └── Telegram Summary
 
 n8n Dashboard: /webhook/stock-dashboard
-  ├── Tab Signale: CFD Long/Short Grid, Buy/Sell, F&G Badge
+  ├── Tab Signale: CFD Long/Short Grid, Buy/Sell, F&G Badge, sichtbare Lernregeln pro Setup
   ├── Tab Portfolio: Empfehlung, P&L, Trailing-Stop-Bar
-  └── Tab Backtesting: Win-Rate, Score-Analyse, MFE/MAE
+  └── Tab Backtesting: Win-Rate, Score-Analyse, MFE/MAE, Gap-/ATR-Regime und Markt x Richtung
 ```
 
 ## Dateien
@@ -53,7 +53,7 @@ n8n Dashboard: /webhook/stock-dashboard
 
 ## Scoring
 
-Gewichtetes System (max 10 Punkte):
+Gewichtetes System (max 9 Punkte):
 
 | Indikator | Gewicht |
 |-----------|---------|
@@ -64,11 +64,29 @@ Gewichtetes System (max 10 Punkte):
 | RSI in Zone | 1.0 |
 | Volumen-Bestaetigung | 0.5 |
 | Kein Gap > 5% | 0.5 |
-| **Bonus** (Trend >= 5d, Vol >= 2x, ADX > 40, Squeeze) | +2.0 |
+| **Bonus** (Trend >= 5d, Vol >= 2x, Squeeze-Fire) | +1.0 |
 
 Minimum fuer CFD-Signal: **5.0/10**
 
-ATR-Multiplikatoren: Stop = 1.5x, TP1 = 1.5x, TP2 = 3.0x
+ATR-Multiplikatoren: Stop = 1.5x, TP1 = 1.5x, TP2 = 2.0x
+
+## Lernschicht / Decision Layer (2026-04-13)
+
+Der Scanner nutzt jetzt nicht nur Backtesting fuer Reporting, sondern spiegelt erste historische Erkenntnisse direkt ins aktuelle CFD-Scoring zurück.
+
+Aktive Regeln:
+
+- **Gap-Penalty**: Setups mit `recent_max_gap >= 4%` werden abgewertet, `>= 6%` deutlich stärker
+- **ATR-Regime-Penalty**: hohe Volatilitätsregime (`ATR >= 3%`) werden vorsichtiger bewertet
+- **Short-Bias-Penalty**: Short-Setups erhalten einen zusätzlichen Skepsis-Abzug
+- **Markt-Adjustments**: schwächere Segmente wie `NASDAQ 100` und `DAX 40` werden gezielt gedämpft
+
+Zusätzlich werden pro CFD-Signal jetzt persistiert:
+
+- `score_components_json` — welche Score-Bausteine/Boni aktiv waren
+- `regime_json` — kompaktes Markt-/Volatilitäts-/Gap-Regime
+
+Damit ist aus reinem Backtesting ein erster geschlossener Lernkreislauf geworden: Analyse -> Ergebnis -> Regel -> sichtbarer Einfluss auf neue Setups.
 
 ## Cron-Schedule
 
@@ -105,9 +123,9 @@ python3 write_dashboard_data.py       # Portfolio + BT an n8n pushen
 Erreichbar unter `https://agents.umzwei.de/webhook/stock-dashboard`
 
 Drei Tabs:
-- **Signale**: CFD Long/Short nebeneinander, Gradient Score-Bars, Fear & Greed mit Pulsing, +Position Button, Sektor-Heatmap
+- **Signale**: CFD Long/Short nebeneinander, Gradient Score-Bars, Fear & Greed mit Pulsing, +Position Button, Sektor-Heatmap und sichtbare Lernregeln/Rule-Badges pro Setup
 - **Portfolio**: Prominente Empfehlungs-Badge (HALTEN/BEOBACHTEN/SCHLIESSEN), Trailing-Stop-Fortschrittsbalken, Gesamt-P&L, aufklappbare Warnungen, Earnings-Banner
-- **Backtesting**: Win-Rate, Avg R, Total R, Score-Bereich-Analyse, nach Richtung/Markt, Outcome-Bars, letzte aufgeloeste Signale
+- **Backtesting**: Win-Rate, Avg R, Total R, Score-Bereich-Analyse, nach Richtung/Markt, Outcome-Bars, Gap-Regime, ATR-Regime, Markt x Richtung, letzte aufgeloeste Signale
 
 ## Sektor-Heatmap (2026-04-09)
 

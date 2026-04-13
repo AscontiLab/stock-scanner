@@ -103,6 +103,58 @@ def _get_stats() -> dict:
     for row in by_score_range:
         row["range"] = row.pop("range_label")
 
+    by_gap_bucket = _query(
+        """SELECT
+            CASE
+                WHEN recent_max_gap < 2 THEN '<2%'
+                WHEN recent_max_gap < 4 THEN '2-3.9%'
+                WHEN recent_max_gap < 6 THEN '4-5.9%'
+                ELSE '6%+'
+            END as bucket,
+            COUNT(*) as cnt,
+            SUM(CASE WHEN outcome IN ('tp1','tp2') THEN 1 ELSE 0 END) as wins,
+            AVG(pnl_r) as avg_r
+        FROM cfd_signals WHERE outcome IS NOT NULL
+        GROUP BY bucket
+        ORDER BY CASE bucket
+            WHEN '<2%' THEN 1
+            WHEN '2-3.9%' THEN 2
+            WHEN '4-5.9%' THEN 3
+            ELSE 4
+        END"""
+    )
+
+    by_atr_bucket = _query(
+        """SELECT
+            CASE
+                WHEN atr_pct < 1 THEN '<1%'
+                WHEN atr_pct < 2 THEN '1-1.9%'
+                WHEN atr_pct < 3 THEN '2-2.9%'
+                ELSE '3%+'
+            END as bucket,
+            COUNT(*) as cnt,
+            SUM(CASE WHEN outcome IN ('tp1','tp2') THEN 1 ELSE 0 END) as wins,
+            AVG(pnl_r) as avg_r
+        FROM cfd_signals WHERE outcome IS NOT NULL
+        GROUP BY bucket
+        ORDER BY CASE bucket
+            WHEN '<1%' THEN 1
+            WHEN '1-1.9%' THEN 2
+            WHEN '2-2.9%' THEN 3
+            ELSE 4
+        END"""
+    )
+
+    by_market_direction = _query(
+        """SELECT market, direction, COUNT(*) as cnt,
+            SUM(CASE WHEN outcome IN ('tp1','tp2') THEN 1 ELSE 0 END) as wins,
+            AVG(pnl_r) as avg_r, SUM(pnl_r) as total_r
+        FROM cfd_signals
+        WHERE outcome IS NOT NULL
+        GROUP BY market, direction
+        ORDER BY market ASC, direction ASC"""
+    )
+
     # Letzte 20 aufgeloeste Signale
     recent = _query(
         "SELECT ticker, market, direction, quality_score, entry_price, "
@@ -122,6 +174,9 @@ def _get_stats() -> dict:
         "by_direction": by_direction,
         "by_market": by_market,
         "by_score_range": by_score_range,
+        "by_gap_bucket": by_gap_bucket,
+        "by_atr_bucket": by_atr_bucket,
+        "by_market_direction": by_market_direction,
         "outcomes": outcomes,
         "recent": recent,
     }

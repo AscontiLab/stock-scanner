@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS cfd_signals (
 
     -- Indikator-Snapshot (JSON)
     indicators_json   TEXT,
+    score_components_json TEXT,
+    regime_json       TEXT,
 
     -- Resolution (befuellt nach Aufloesung)
     resolved_at       TEXT,
@@ -108,7 +110,20 @@ def init_db():
     """Erstellt Tabellen falls noetig."""
     conn = _get_conn()
     conn.executescript(_SCHEMA)
+    _migrate_schema(conn)
     conn.close()
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(cfd_signals)").fetchall()}
+    migrations = [
+        ("score_components_json", "TEXT"),
+        ("regime_json", "TEXT"),
+    ]
+    for col_name, col_type in migrations:
+        if col_name not in existing:
+            conn.execute(f"ALTER TABLE cfd_signals ADD COLUMN {col_name} {col_type}")
+    conn.commit()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -152,6 +167,11 @@ def log_cfd_signal(run_id: int, row: dict, direction: str) -> int:
         "vwap": row.get("vwap", ""),
         "ema9_gt_ema21": direction == "long",
     }
+    score_snapshot = {
+        "components": row.get(f"cfd_{direction}_components", {}),
+        "penalties": row.get(f"cfd_{direction}_penalties", {}),
+    }
+    regime_snapshot = row.get("regime_snapshot", {})
 
     conn = _get_conn()
     cur = conn.execute(
@@ -160,15 +180,15 @@ def log_cfd_signal(run_id: int, row: dict, direction: str) -> int:
             adx, plus_di, minus_di, rsi, vol_ratio, atr_pct,
             trend_days, recent_max_gap,
             entry_price, stop_price, tp1_price, tp2_price,
-            indicators_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            indicators_json, score_components_json, regime_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (run_id, row["ticker"], row.get("market", ""),
          direction, quality,
          row.get("adx"), row.get("plus_di"), row.get("minus_di"),
          row.get("rsi"), row.get("vol_ratio"), row.get("atr_pct"),
          trend_days, row.get("recent_max_gap"),
          row["price"], stop, tp1, tp2,
-         json.dumps(indicators)),
+         json.dumps(indicators), json.dumps(score_snapshot), json.dumps(regime_snapshot)),
     )
     signal_id = cur.lastrowid
     conn.commit()
@@ -594,8 +614,8 @@ def _import_signal_row(conn, run_id, row, direction):
             adx, plus_di, minus_di, rsi, vol_ratio, atr_pct,
             trend_days, recent_max_gap,
             entry_price, stop_price, tp1_price, tp2_price,
-            indicators_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            indicators_json, score_components_json, regime_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (run_id, row["ticker"], row.get("market", ""),
          direction, quality,
          _float(row.get("adx")), _float(row.get("plus_di")), _float(row.get("minus_di")),
@@ -603,7 +623,7 @@ def _import_signal_row(conn, run_id, row, direction):
          int(float(row.get(f"trend_{direction}_days", 0) or 0)),
          _float(row.get("recent_max_gap")),
          float(row["price"]), stop, tp1, tp2,
-         json.dumps({})),
+         json.dumps({}), json.dumps({}), json.dumps({})),
     )
     conn.commit()
 

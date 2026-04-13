@@ -210,6 +210,54 @@ def _compute_sector_heatmap() -> list[dict]:
 
 def _load_signals() -> dict:
     """Laedt alle Signal-Daten fuer die Anzeige."""
+    def _parse_jsonish(value):
+        if isinstance(value, dict):
+            return value
+        if not value:
+            return {}
+        try:
+            return json.loads(value)
+        except Exception:
+            return {}
+
+    def _annotate_learning(row: dict, direction: str) -> dict:
+        penalties = _parse_jsonish(row.get(f"cfd_{direction}_penalties"))
+        components = _parse_jsonish(row.get(f"cfd_{direction}_components"))
+        flags: list[dict] = []
+        summary: list[str] = []
+
+        if penalties.get("gap_hard"):
+            flags.append({"label": "Gap > 6%", "kind": "penalty"})
+            summary.append("Hartes Gap-Filter aktiv")
+        elif penalties.get("gap_soft"):
+            flags.append({"label": "Gap 4-6%", "kind": "penalty"})
+            summary.append("Gap-Regime dämpft den Score")
+
+        if penalties.get("atr_high"):
+            flags.append({"label": "ATR >= 3%", "kind": "penalty"})
+            summary.append("Hohes ATR-Regime vorsichtiger")
+
+        market_adj = _safe_float(penalties.get("market_adjustment"))
+        if market_adj:
+            flags.append({
+                "label": f"Marktfilter {row.get('market', '')}".strip(),
+                "kind": "bonus" if market_adj > 0 else "penalty",
+            })
+            summary.append(f"Marktfilter für {row.get('market', '?')} aktiv")
+
+        if penalties.get("short_bias"):
+            flags.append({"label": "Short-Bias", "kind": "penalty"})
+            summary.append("Shorts werden skeptischer bewertet")
+
+        if components.get("bonus_trend_maturity"):
+            flags.append({"label": "Trend-Reife", "kind": "bonus"})
+        if components.get("bonus_squeeze_fire"):
+            flags.append({"label": "Squeeze Fire", "kind": "bonus"})
+
+        row["learning_flags"] = flags[:4]
+        row["learning_summary"] = " | ".join(summary[:2]) if summary else "Basisscore ohne starke Sonderregeln"
+        return row
+
     # CFD Setups (Root-Level-Kopie)
     cfd_rows = _read_csv(SCANNER_DIR / "cfd_setups.csv")
     cfd_long = [r for r in cfd_rows if r.get("cfd_direction") == "long"]
@@ -218,6 +266,8 @@ def _load_signals() -> dict:
     # Sortieren nach Score
     cfd_long.sort(key=lambda r: _safe_float(r.get("cfd_long_score")), reverse=True)
     cfd_short.sort(key=lambda r: _safe_float(r.get("cfd_short_score")), reverse=True)
+    cfd_long = [_annotate_learning(r, "long") for r in cfd_long]
+    cfd_short = [_annotate_learning(r, "short") for r in cfd_short]
 
     # Langfrist-Signale statt Buy/Sell
     all_rows = _read_csv(SCANNER_DIR / "trading_signals.csv")

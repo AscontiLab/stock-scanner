@@ -324,8 +324,8 @@ def analyze_ticker(ticker: str, market: str, enforce_liquidity: bool = True) -> 
             trend_short_days += 1
 
     # --- CFD Scores (ausgelagert in scoring.cfd_scorer) ---
-    cfd_long, cfd_short = compute_cfd_scores(
-        cfg=CFG, adx_val=adx_val, plus_di_val=plus_di_val, minus_di_val=minus_di_val,
+    cfd_long, cfd_short, cfd_meta = compute_cfd_scores(
+        cfg=CFG, market=market, adx_val=adx_val, plus_di_val=plus_di_val, minus_di_val=minus_di_val,
         current_price=current_price, sma20_val=sma20_val, sma50_val=sma50_val,
         ema9_val=ema9_val, ema21_val=ema21_val,
         curr_hist=curr_hist, prev_hist=prev_hist, rsi_val=rsi_val,
@@ -359,7 +359,18 @@ def analyze_ticker(ticker: str, market: str, enforce_liquidity: bool = True) -> 
         "rvol_label": rvol_label, "recent_max_gap": round(recent_max_gap, 1),
         "cfd_long_score": cfd_long, "cfd_short_score": cfd_short,
         "cfd_quality_score": max(cfd_long, cfd_short),
+        "cfd_long_components": cfd_meta["long"]["components"],
+        "cfd_long_penalties": cfd_meta["long"]["penalties"],
+        "cfd_short_components": cfd_meta["short"]["components"],
+        "cfd_short_penalties": cfd_meta["short"]["penalties"],
         "trend_long_days": trend_long_days, "trend_short_days": trend_short_days,
+        "regime_snapshot": {
+            "market": market,
+            "atr_bucket": "<2%" if atr_pct < 2 else "2-2.9%" if atr_pct < 3 else "3%+",
+            "gap_bucket": "<2%" if recent_max_gap < 2 else "2-3.9%" if recent_max_gap < 4 else "4-5.9%" if recent_max_gap < 6 else "6%+",
+            "trend_long_bucket": "<=2" if trend_long_days <= 2 else "3-5" if trend_long_days <= 5 else "6-8" if trend_long_days <= 8 else "9+",
+            "trend_short_bucket": "<=2" if trend_short_days <= 2 else "3-5" if trend_short_days <= 5 else "6-8" if trend_short_days <= 8 else "9+",
+        },
         **levels,
         "longterm_score": longterm["longterm_score"],
         "longterm_label": longterm["longterm_label"],

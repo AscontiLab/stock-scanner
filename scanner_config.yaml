@@ -66,6 +66,21 @@ scoring:
   # Penalties (neu)
   penalty:
     adx_overripe_pts: -0.5     # ADX > 45 = ueberreifer Trend
+    gap_soft_pct: 4.0          # ab 4% Gap kippt die Performance deutlich
+    gap_soft_pts: -0.5
+    gap_hard_pct: 6.0          # 6%+ war im Backtest klar toxisch
+    gap_hard_pts: -1.0
+    atr_high_pct: 3.0          # hohes ATR-Regime vorsichtiger behandeln
+    atr_high_pts: -0.3
+    short_bias_pts: -0.4       # Shorts historisch klar schwaecher
+
+  market_adjustments:
+    long:
+      NASDAQ 100: -0.2
+      DAX 40: -0.3
+    short:
+      NASDAQ 100: -0.6
+      DAX 40: -0.8
 
   # Threshold fuer CFD-Signal
   threshold: 5.0

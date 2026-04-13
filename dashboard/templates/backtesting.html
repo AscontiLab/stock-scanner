@@ -137,6 +137,88 @@
 </div>
 {% endif %}
 
+{% if by_gap_bucket or by_atr_bucket %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <div class="card p-5">
+        <h2 class="text-lg font-semibold mb-4" style="color: var(--gold);">Nach Gap-Regime</h2>
+        {% if by_gap_bucket %}
+        <table>
+            <thead>
+                <tr><th scope="col">Gap</th><th scope="col">Sig.</th><th scope="col">Win%</th><th scope="col">Avg R</th></tr>
+            </thead>
+            <tbody>
+                {% for g in by_gap_bucket %}
+                <tr>
+                    <td class="mono font-semibold text-white">{{ g.bucket }}</td>
+                    <td class="mono">{{ g.cnt }}</td>
+                    <td class="mono {{ 'pnl-pos' if g.cnt > 0 and (g.wins / g.cnt * 100) >= 50 else 'pnl-neg' }}">{{ "%.0f"|format(g.wins / g.cnt * 100 if g.cnt > 0 else 0) }}%</td>
+                    <td class="mono {{ 'pnl-pos' if (g.avg_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(g.avg_r or 0) }}R</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-sm" style="color: var(--text-dim);">Keine Daten.</p>
+        {% endif %}
+    </div>
+
+    <div class="card p-5">
+        <h2 class="text-lg font-semibold mb-4" style="color: var(--gold);">Nach ATR-Regime</h2>
+        {% if by_atr_bucket %}
+        <table>
+            <thead>
+                <tr><th scope="col">ATR</th><th scope="col">Sig.</th><th scope="col">Win%</th><th scope="col">Avg R</th></tr>
+            </thead>
+            <tbody>
+                {% for a in by_atr_bucket %}
+                <tr>
+                    <td class="mono font-semibold text-white">{{ a.bucket }}</td>
+                    <td class="mono">{{ a.cnt }}</td>
+                    <td class="mono {{ 'pnl-pos' if a.cnt > 0 and (a.wins / a.cnt * 100) >= 50 else 'pnl-neg' }}">{{ "%.0f"|format(a.wins / a.cnt * 100 if a.cnt > 0 else 0) }}%</td>
+                    <td class="mono {{ 'pnl-pos' if (a.avg_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(a.avg_r or 0) }}R</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-sm" style="color: var(--text-dim);">Keine Daten.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if by_market_direction %}
+<div class="card p-5 mb-6">
+    <h2 class="text-lg font-semibold mb-4" style="color: var(--gold);">Markt x Richtung</h2>
+    <div class="overflow-x-auto">
+        <table>
+            <thead>
+                <tr><th scope="col">Markt</th><th scope="col">Richtung</th><th scope="col">Sig.</th><th scope="col">Wins</th><th scope="col">Win%</th><th scope="col">Avg R</th><th scope="col">Total R</th></tr>
+            </thead>
+            <tbody>
+                {% for row in by_market_direction %}
+                <tr>
+                    <td class="font-semibold text-white">{{ row.market }}</td>
+                    <td>
+                        {% if row.direction == 'long' %}
+                        <span class="badge-long px-2 py-0.5 rounded text-xs">LONG</span>
+                        {% else %}
+                        <span class="badge-short px-2 py-0.5 rounded text-xs">SHORT</span>
+                        {% endif %}
+                    </td>
+                    <td class="mono">{{ row.cnt }}</td>
+                    <td class="mono">{{ row.wins }}</td>
+                    <td class="mono {{ 'pnl-pos' if row.cnt > 0 and (row.wins / row.cnt * 100) >= 50 else 'pnl-neg' }}">{{ "%.0f"|format(row.wins / row.cnt * 100 if row.cnt > 0 else 0) }}%</td>
+                    <td class="mono {{ 'pnl-pos' if (row.avg_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(row.avg_r or 0) }}R</td>
+                    <td class="mono {{ 'pnl-pos' if (row.total_r or 0) >= 0 else 'pnl-neg' }}">{{ "%.1f"|format(row.total_r or 0) }}R</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
 <!-- MFE/MAE Scatter (Canvas) -->
 {% if recent %}
 <div class="card p-5 mb-6">

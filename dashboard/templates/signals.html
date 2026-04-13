@@ -133,6 +133,18 @@
                             <td>
                                 <div class="font-semibold text-white">{{ r.ticker }}</div>
                                 <div class="text-xs" style="color: var(--text-dim);">{{ r.market }}</div>
+                                <div class="text-[11px] mt-1" style="color: var(--text-muted);">{{ r.learning_summary }}</div>
+                                {% if r.learning_flags %}
+                                <div class="flex flex-wrap gap-1 mt-1">
+                                    {% for flag in r.learning_flags %}
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded mono"
+                                          style="background: {{ 'rgba(0,255,136,0.10)' if flag.kind == 'bonus' else 'rgba(255,149,0,0.12)' }};
+                                                 color: {{ 'var(--green)' if flag.kind == 'bonus' else 'var(--gold)' }};">
+                                        {{ flag.label }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
                             </td>
                             <td>
                                 <div class="flex items-center gap-2">
@@ -197,6 +209,18 @@
                             <td>
                                 <div class="font-semibold text-white">{{ r.ticker }}</div>
                                 <div class="text-xs" style="color: var(--text-dim);">{{ r.market }}</div>
+                                <div class="text-[11px] mt-1" style="color: var(--text-muted);">{{ r.learning_summary }}</div>
+                                {% if r.learning_flags %}
+                                <div class="flex flex-wrap gap-1 mt-1">
+                                    {% for flag in r.learning_flags %}
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded mono"
+                                          style="background: {{ 'rgba(0,255,136,0.10)' if flag.kind == 'bonus' else 'rgba(255,149,0,0.12)' }};
+                                                 color: {{ 'var(--green)' if flag.kind == 'bonus' else 'var(--gold)' }};">
+                                        {{ flag.label }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
                             </td>
                             <td>
                                 <div class="flex items-center gap-2">
