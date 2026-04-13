@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+import ast
 from datetime import datetime
 from pathlib import Path
 
@@ -218,7 +219,10 @@ def _load_signals() -> dict:
         try:
             return json.loads(value)
         except Exception:
-            return {}
+            try:
+                return ast.literal_eval(value)
+            except Exception:
+                return {}
 
     def _annotate_learning(row: dict, direction: str) -> dict:
         penalties = _parse_jsonish(row.get(f"cfd_{direction}_penalties"))

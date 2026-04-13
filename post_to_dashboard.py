@@ -4,6 +4,7 @@
 import json
 import os
 import sys
+import ast
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -68,12 +69,18 @@ def _stock_explainability(signal: dict, direction: str | None = None) -> dict:
         try:
             raw_components = json.loads(raw_components)
         except Exception:
-            raw_components = {}
+            try:
+                raw_components = ast.literal_eval(raw_components)
+            except Exception:
+                raw_components = {}
     if isinstance(raw_penalties, str):
         try:
             raw_penalties = json.loads(raw_penalties)
         except Exception:
-            raw_penalties = {}
+            try:
+                raw_penalties = ast.literal_eval(raw_penalties)
+            except Exception:
+                raw_penalties = {}
 
     if signal.get("ma") and signal.get("ma") != "neutral":
         why_now.append(f"MA-Struktur ist aktuell {signal.get('ma')}.")
