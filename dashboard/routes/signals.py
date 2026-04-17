@@ -304,9 +304,43 @@ def _load_signals() -> dict:
 @router.get("/", response_class=HTMLResponse)
 async def signals_page(request: Request):
     data = _load_signals()
-    return templates.TemplateResponse("signals.html", {"request": request, **data})
+    intraday = _load_intraday()
+    return templates.TemplateResponse(
+        "signals.html",
+        {"request": request, **data, "intraday": intraday},
+    )
 
 
 @router.get("/api/signals")
 async def signals_json():
     return _load_signals()
+
+
+INTRADAY_JSON_PATH = SCANNER_DIR / "dashboard" / "data" / "cfd_intraday.json"
+
+
+def _load_intraday() -> dict:
+    """Liest die letzte Intraday-Scan-Ausgabe (cfd_intraday.json)."""
+    if not INTRADAY_JSON_PATH.exists():
+        return {"generated_at": None, "rows": [], "stale": True}
+    try:
+        data = json.loads(INTRADAY_JSON_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {"generated_at": None, "rows": [], "stale": True}
+
+    # Stale wenn aelter als 30 min
+    stale = True
+    gen = data.get("generated_at")
+    if gen:
+        try:
+            gen_dt = datetime.fromisoformat(gen)
+            stale = (datetime.utcnow() - gen_dt).total_seconds() > 1800
+        except ValueError:
+            pass
+    data["stale"] = stale
+    return data
+
+
+@router.get("/api/intraday")
+async def intraday_json():
+    return _load_intraday()
