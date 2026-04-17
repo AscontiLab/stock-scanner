@@ -148,6 +148,9 @@ Drei Tabs:
 
 FastAPI-Dashboard laeuft zusaetzlich auf Port 8091 (systemd Service `stock-dashboard`).
 
+Die separate CFD-HTTP-API auf Port 5051 startet nur mit gesetztem `CFD_API_KEY`.
+Laufzeitdateien wie `.env`, `output/`, `logs/`, `*.db`, `*.csv`, `*.html` und lokale Portfolio-/Cache-JSONs bleiben bewusst unversioniert.
+
 ## Telegram
 
 Push-Nachrichten bei Score >= 7, Stop/TP-Hit und Daily Summary.
