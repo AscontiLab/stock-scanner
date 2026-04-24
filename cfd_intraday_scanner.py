@@ -8,7 +8,8 @@ Output: dashboard/data/cfd_intraday.json (vom Dashboard gepollt) + Telegram-Aler
 
 Alerts:
 - Position-Hit (Stop/TP1/TP2): immer feuern, kein Cooldown
-- Score-Drift bei offener Position (entry_score - current_score >= 3.0): max 1x/Tag/Position
+- Close-Empfehlung bei offener Position (Score < 5.0 oder Gegenrichtung staerker): max 1x/Tag/Position
+- Score-Drift bei offener Position (entry_score - current_score >= 3.0, "pruefen"): max 1x/Tag/Position
 - Neues Setup (max(long, short) >= 7.0) auf nicht-Position-Tickern: max 1x/4h/Ticker
 
 Kein Auto-Close von Positionen — Maik handelt manuell beim Broker.
@@ -55,6 +56,11 @@ SETUP_ALERT_COOLDOWN_HOURS = 4
 DRIFT_ALERT_THRESHOLD = 3.0
 SCORE_ALERT_MIN = 7.0
 MIN_BARS_FOR_SCORE = 30
+
+# Close-Empfehlung: Score der Positions-Richtung faellt unter Setup-Validitaet
+# oder Gegenrichtung wird deutlich staerker → Setup invalidiert.
+POSITION_CLOSE_SCORE_THRESHOLD = 5.0     # absolut
+POSITION_CLOSE_FLIP_MARGIN = 1.5         # opposite - own >= dies
 
 
 def load_config() -> dict:
@@ -444,10 +450,45 @@ def main() -> int:
 
             entry_score = pos.get("score_at_entry", 0) or 0
             current_dir_score = long_score if pos["direction"] == "long" else short_score
+            opposite_score = short_score if pos["direction"] == "long" else long_score
             drift = round(entry_score - current_dir_score, 1)
             row["entry_score"] = entry_score
             row["drift"] = drift
-            if drift >= DRIFT_ALERT_THRESHOLD:
+            row["current_dir_score"] = round(current_dir_score, 1)
+            row["opposite_score"] = round(opposite_score, 1)
+
+            # Close-Empfehlung (harter Invalidations-Alert, 1x/Tag/Position)
+            below_threshold = current_dir_score < POSITION_CLOSE_SCORE_THRESHOLD
+            flipped = (opposite_score - current_dir_score) >= POSITION_CLOSE_FLIP_MARGIN
+            close_reason = None
+            if below_threshold and flipped:
+                close_reason = f"Score {current_dir_score:.1f} < {POSITION_CLOSE_SCORE_THRESHOLD} und Gegenrichtung {opposite_score:.1f} staerker"
+            elif below_threshold:
+                close_reason = f"Score {current_dir_score:.1f} unter Setup-Schwelle ({POSITION_CLOSE_SCORE_THRESHOLD})"
+            elif flipped:
+                close_reason = f"Gegenrichtung staerker ({opposite_score:.1f} vs {current_dir_score:.1f})"
+
+            if close_reason:
+                row["close_hint"] = close_reason
+                key = f"{ticker}_close_{datetime.utcnow().strftime('%Y-%m-%d')}"
+                if cooldown_passed(state, key, hours=24) and not args.dry_run:
+                    pnl_pct = 0.0
+                    try:
+                        if pos["direction"] == "long":
+                            pnl_pct = (ind["current_price"] - pos["entry_price"]) / pos["entry_price"] * 100
+                        else:
+                            pnl_pct = (pos["entry_price"] - ind["current_price"]) / pos["entry_price"] * 100
+                    except Exception:
+                        pass
+                    telegram_alerts.send_message(
+                        f"\u26d4 <b>SCHLIESSEN: {ticker} {pos['direction'].upper()}</b>\n"
+                        f"Setup invalidiert \u2014 {close_reason}.\n"
+                        f"Kurs: {ind['current_price']:.2f} (P&L {pnl_pct:+.2f}%) | Entry: {pos['entry_price']:.2f}\n"
+                        f"Stop: {pos.get('stop_current', 0):.2f} | TP1: {pos.get('tp1', 0):.2f}"
+                    )
+                    mark_alert(state, key)
+            elif drift >= DRIFT_ALERT_THRESHOLD:
+                # Weicher Drift-Alert nur wenn noch kein Close-Alert \u2014 sonst doppelt.
                 key = f"{ticker}_drift_{datetime.utcnow().strftime('%Y-%m-%d')}"
                 if cooldown_passed(state, key, hours=24) and not args.dry_run:
                     telegram_alerts.send_message(
