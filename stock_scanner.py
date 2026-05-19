@@ -585,6 +585,42 @@ def main():
         print(f"  {r['ticker']:10s}  Score={r['cfd_short_score']:.1f}/10  ADX={r['adx']}  "
               f"-DI={r.get('minus_di','?')}  RSI={r['rsi']}  Stop={r['stop_short']}  TP2={r['tp2_short']}")
 
+    # --- Earnings-Gate fuer CFD-Setups ---
+    # Swing-Position ueber Earnings = Gap-Risiko, das kein Stop auffaengt.
+    # Nur fuer die finalen Setup-Ticker (<=10) → kein Kosten-/Laufzeitproblem
+    # (yfinance gratis). Earnings <= EARNINGS_GATE_DAYS Kalendertage
+    # (~3 Handelstage) → Setup blockiert.
+    EARNINGS_GATE_DAYS = 5
+    if not args.dry_run:
+        today = datetime.now().date()
+        gated = []
+        for r in cfd_long_rows + cfd_short_rows:
+            r.setdefault("next_earnings", "")
+            r.setdefault("earnings_gate", False)
+            try:
+                cal = yf.Ticker(r["ticker"]).calendar
+                ed = cal.get("Earnings Date") if isinstance(cal, dict) else None
+                if isinstance(ed, (list, tuple)) and ed:
+                    ed = ed[0]
+                if ed is not None and hasattr(ed, "year"):
+                    r["next_earnings"] = ed.isoformat()
+                    days = (ed - today).days
+                    if 0 <= days <= EARNINGS_GATE_DAYS:
+                        r["earnings_gate"] = True
+                        gated.append((r["ticker"], ed.isoformat(), days))
+            except Exception as e:
+                # yfinance unzuverlaessig — Gate ist Schutzfilter, kein Pflichtfeld.
+                logging.warning("Earnings-Lookup fehlgeschlagen fuer %s: %s",
+                                 r["ticker"], e)
+        if gated:
+            print(f"\n⚠ EARNINGS-GATE aktiv ({len(gated)} Setup(s) blockiert — "
+                  f"kein Entry vor Earnings):")
+            for tk, ed, d in gated:
+                print(f"  {tk:10s}  Earnings {ed} (in {d} Tagen)")
+        else:
+            print(f"\nEarnings-Gate: kein Setup mit Earnings in "
+                  f"{EARNINGS_GATE_DAYS} Tagen")
+
     # --- Portfolio-Check ---
     position_reports = []
     positions = list_positions()

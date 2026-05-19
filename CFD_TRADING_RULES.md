@@ -25,6 +25,7 @@ Top 5 short ab Score 5,0. Es wird **nur eine strengere Teilmenge** gehandelt.
 | RSI | long 45–62 / short 38–55 | `scanner_config.yaml` |
 | Richtung | **Long bevorzugt** | Shorts schwächer (Bias −0,4, Cap 7,5) |
 | Gap | < 4 % | ab 4 % kippt die Performance |
+| **Earnings** | nächster Termin **> 5 Kalendertage** entfernt | Swing über Earnings = Gap-Risiko, das kein Stop auffängt. Scanner setzt `earnings_gate`/`next_earnings` automatisch (yfinance) für Setup-Ticker |
 
 ## 3 · Entry — „nicht zu spät"
 
@@ -66,11 +67,28 @@ drei Trigger ignoriert, weil keine Regel existierte).
 
 ## 6 · Fee-Gate (Pflichtrechnung vor jedem Entry)
 
-`erwartetes TP1 in %` muss **≥ 3× Round-Trip-Kosten** sein
-(Commission rein+raus ≈ 0,5 % + Overnight ≈ 0,02 %/Tag × Haltetage).
-Sonst Trade vor Einstieg negativ erwartbar → **skip**.
+Kein Pauschalwert mehr — echtes Revolut-CFD-Kostenmodell:
 
-> STT: TP1 = 3,8 %, Kosten ≈ 0,5 % → 7,6× → Gate ok (STT scheiterte am Exit).
+```
+Round-Trip-Kosten % = 0,50 %                      (Commission: 0,25 % je Seite)
+                     + 0,02 % × Haltetage         (Overnight-Finanzierung¹)
+                     ( Fr→Mo zählt 3 Overnight-Tage )
+
+¹ instrumentabhängig (Referenzzins ± Spread). 0,02 %/Tag = empirischer
+  Richtwert aus dem realen STT-Statement (0,30 $/Tag auf ~1.661 $).
+```
+
+**Regel:** `erwartetes TP1 in %` (= 1,5×ATR ÷ Entry) muss **≥ 3 × Round-Trip-Kosten %**
+sein. Sonst ist der Trade vor Einstieg negativ erwartbar → **skip**.
+
+> STT-Gegenprobe: TP1 = 1,5×3,84 ÷ 151 = **3,8 %**. Haltedauer-Annahme bis
+> Zeit-Stop (7 Tage): 0,50 % + 0,02 %×7 ≈ **0,64 %** (real wurden es 13 Tage
+> → ~0,73 %). 3,8 / 0,64 ≈ **5,9×** → Gate **ok**. STT scheiterte nicht hier,
+> sondern am fehlenden Exit — das Fee-Gate hätte den Trade korrekt zugelassen.
+
+**Konsequenz fürs Mini-Konto:** Je länger der Hold, desto höher die Gate-Hürde.
+Ein Setup mit knappem TP1 *und* erwartet langer Haltedauer fällt durch — genau
+richtig, denn dort frisst die Friction die Edge.
 
 ## 7 · Trade-Journal & Wöchentlicher Review
 
@@ -88,11 +106,12 @@ Wöchentlich **nicht das Geld bewerten**, sondern: Wie oft Regel verletzt?
 
 **ENTRY (nach EOD-Scan, Ausführung am Folgetag per Limit):**
 1. Score ≥ 7,0? ADX 30–42? RSI in Zone? Gap < 4 %?
-2. Setup Tag 1 oder 2 (nicht älter)?
-3. Kurs in Entry-Zone (≤ Setup-Preis + 1×ATR)?
-4. Stop-Distanz ≤ 4 %? ATR% 1–3 %?
-5. Fee-Gate: TP1-% ≥ 3× Kosten?
-6. Keine andere Position offen?
+2. `earnings_gate` = false / nächster Earnings-Termin > 5 Tage?
+3. Setup Tag 1 oder 2 (nicht älter)?
+4. Kurs in Entry-Zone (≤ Setup-Preis + 1×ATR)?
+5. Stop-Distanz ≤ 4 %? ATR% 1–3 %?
+6. Fee-Gate: TP1-% ≥ 3× (0,50 % + 0,02 %×Haltetage)?
+7. Keine andere Position offen?
 → Nur wenn **alle** ✓: Limit-Order + Stop-Order setzen.
 
 **EXIT (täglich prüfen, solange Position offen):**
