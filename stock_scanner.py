@@ -681,39 +681,21 @@ def main():
         df_cfd.to_csv("cfd_setups.csv", index=False, encoding="utf-8-sig")
         print(f"CFD-CSV:      {cfd_csv.resolve()}")
 
-    # --- Setup-Invalidation-Check fuer offene Positionen ---
-    # Wenn eine offene Position in heutigen EOD-Setups nicht mehr in ihrer Richtung
-    # erscheint → Setup ist invalidiert, Telegram-Alert "SCHLIESSEN".
-    # Ergaenzt den Intraday-Alert: Daily ist belastbarer, Intraday ist schneller.
-    if positions and not args.dry_run:
+    # --- Exit-Wächter (Signal-Engine Stufe 1) fuer offene reale Positionen ---
+    # Prueft die OFFENEN Positionen aus revolut_cfd.db (NICHT mehr dem alten, leeren
+    # cfd_portfolio.json) gegen die frische cfd_setups.csv auf die harten §5-Exit-
+    # Trigger (Setup-Erosion / Zeit-Stop / Earnings-Gate) und schickt bei Bedarf
+    # einen "SCHLIESSEN morgen"-Telegram-Alert. Logik + Unit-Tests: cfd_exit_rules.py.
+    if not args.dry_run:
         try:
-            setup_keys = {(r["ticker"], "long") for r in cfd_long_rows} | \
-                         {(r["ticker"], "short") for r in cfd_short_rows}
-            invalidated = [p for p in positions
-                           if (p["ticker"], p["direction"]) not in setup_keys]
-            if invalidated:
-                from telegram_alerts import send_message
-                last_close = {r["ticker"]: r.get("price") for r in results}
-                lines = ["⛔ <b>Setup invalidiert (EOD) — SCHLIESSEN pruefen</b>"]
-                for p in invalidated:
-                    price = last_close.get(p["ticker"])
-                    if price and p["entry_price"]:
-                        if p["direction"] == "long":
-                            pnl = (price - p["entry_price"]) / p["entry_price"] * 100
-                        else:
-                            pnl = (p["entry_price"] - price) / p["entry_price"] * 100
-                        px_info = f"Kurs {price:.2f} (P&L {pnl:+.2f}%)"
-                    else:
-                        px_info = "Kurs n/a"
-                    lines.append(
-                        f"• <b>{p['ticker']} {p['direction'].upper()}</b> — "
-                        f"Entry {p['entry_price']:.2f}, {px_info}"
-                    )
-                lines.append("Ticker fehlen heute in cfd_setups.csv in ihrer Richtung.")
-                send_message("\n".join(lines))
-                print(f"Telegram: Setup-Invalidation-Alert für {len(invalidated)} Position(en) gesendet")
+            from cfd_exit_rules import run_exit_check
+            evals = run_exit_check()
+            alerted = sum(1 for e in evals if e["triggers"])
+            if evals:
+                print(f"Exit-Wächter: {len(evals)} offene Position(en), "
+                      f"{alerted} SCHLIESSEN-Alert(s) gesendet")
         except Exception as e:
-            print(f"Setup-Invalidation-Alert übersprungen: {e}")
+            print(f"Exit-Wächter übersprungen: {e}")
 
     # --- Backtesting ---
     if CFG["backtesting"]["enabled"] and not args.dry_run:
