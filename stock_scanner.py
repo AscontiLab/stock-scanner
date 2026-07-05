@@ -697,6 +697,20 @@ def main():
         except Exception as e:
             print(f"Exit-Wächter übersprungen: {e}")
 
+    # --- Entry-Empfehlung (Signal-Engine Stufe 2): genau EIN Trade fuer morgen ---
+    # Wendet die strengen §2/§3/§6-Regeln auf die frischen Setups an, einigt sich
+    # sweetspot-gerankt auf genau einen (nur wenn keine Position offen) und schickt
+    # "MORGEN: TICKER ..." bzw. "kein Trade morgen" + Grund. Logik+Tests: cfd_entry_pick.py.
+    if not args.dry_run:
+        try:
+            from cfd_entry_pick import run_entry_pick
+            res = run_entry_pick()
+            pick = res.get("pick")
+            print("Entry-Empfehlung: "
+                  + ((pick["ticker"] + " " + pick["direction"]) if pick else "kein Trade morgen"))
+        except Exception as exc:
+            print(f"Entry-Empfehlung übersprungen: {exc}")
+
     # --- Backtesting ---
     if CFG["backtesting"]["enabled"] and not args.dry_run:
         try:
