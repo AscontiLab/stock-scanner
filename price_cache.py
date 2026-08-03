@@ -54,6 +54,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_price_cache_ticker_date
         ON price_cache (ticker, date)
     """)
+    # Merkt sich den fruehesten bei yfinance verfuegbaren Tag je Ticker, damit
+    # ein Backfill bei jungen Werten (IPO) nicht bei jedem Aufruf neu versucht wird.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS price_cache_meta (
+            ticker         TEXT PRIMARY KEY,
+            earliest_date  TEXT,
+            checked_at     TEXT NOT NULL
+        )
+    """)
     conn.commit()
 
 
@@ -145,6 +154,69 @@ def save_prices(ticker: str, df: pd.DataFrame) -> None:
         logger.warning("Cache-Schreibfehler fuer %s: %s", ticker, e)
 
 
+def _get_meta(ticker: str) -> tuple[str | None, str | None]:
+    """(earliest_date, checked_at) aus price_cache_meta, (None, None) wenn unbekannt."""
+    try:
+        conn = _get_connection()
+        row = conn.execute(
+            "SELECT earliest_date, checked_at FROM price_cache_meta WHERE ticker = ?",
+            (ticker,),
+        ).fetchone()
+        conn.close()
+        return (row[0], row[1]) if row else (None, None)
+    except Exception:
+        return (None, None)
+
+
+def _set_meta(ticker: str, earliest_date: str | None) -> None:
+    try:
+        conn = _get_connection()
+        conn.execute(
+            """INSERT OR REPLACE INTO price_cache_meta (ticker, earliest_date, checked_at)
+               VALUES (?, ?, ?)""",
+            (ticker, earliest_date, datetime.now().isoformat()),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning("Meta-Schreibfehler fuer %s: %s", ticker, e)
+
+
+# Toleranz: Boersenferien/Wochenenden am Rand sind kein echtes Loch
+_FRONT_GAP_TOLERANCE_DAYS = 7
+# Wie oft ein erfolgloser Backfill-Versuch wiederholt wird (junge Ticker/IPOs)
+_META_RECHECK_DAYS = 30
+
+
+def _needs_front_backfill(ticker: str, cached_df: pd.DataFrame, want_start: str) -> bool:
+    """True, wenn der Cache den angeforderten Zeitraum vorne nicht abdeckt.
+
+    Das ist der Fall, der lange still danebenging: der Cache wurde einmal mit
+    einem kurzen Zeitraum befuellt und danach nur noch taeglich nach vorne
+    fortgeschrieben. Eine spaetere Anfrage ueber 1-2 Jahre bekam dann die kurze
+    Historie zurueck — ohne Fehler, aber SMA200/Golden Cross fallen damit still
+    auf 0 Punkte, weil 200 Handelstage schlicht fehlen.
+    """
+    have_start = pd.Timestamp(cached_df.index.min())
+    gap_days = (have_start - pd.Timestamp(want_start)).days
+    if gap_days <= _FRONT_GAP_TOLERANCE_DAYS:
+        return False
+
+    earliest, checked_at = _get_meta(ticker)
+    if earliest:
+        # Bekannt: aelter als das gibt es bei yfinance nicht (z. B. IPO).
+        if have_start <= pd.Timestamp(earliest) + timedelta(days=_FRONT_GAP_TOLERANCE_DAYS):
+            return False
+    if checked_at:
+        try:
+            age = (datetime.now() - datetime.fromisoformat(checked_at)).days
+            if age < _META_RECHECK_DAYS and earliest is None:
+                return False  # kuerzlich erfolglos versucht -> nicht bei jedem Aufruf neu
+        except ValueError:
+            pass
+    return True
+
+
 def _invalidate_today(ticker: str) -> None:
     """Loescht den heutigen Eintrag, damit Intraday-Updates frisch geladen werden."""
     try:
@@ -186,6 +258,26 @@ def get_prices(ticker: str, period: str = "90d") -> pd.DataFrame | None:
 
     # Cache abfragen
     cached_df = get_cached_prices(ticker, start_str, end_str)
+
+    # Deckt der Cache den angeforderten Zeitraum vorne ueberhaupt ab?
+    # Wenn nicht, einmal die volle Historie nachladen (siehe _needs_front_backfill).
+    if cached_df is not None and _needs_front_backfill(ticker, cached_df, start_str):
+        logger.info("%s: Cache beginnt erst %s (angefragt ab %s) — lade Historie nach",
+                    ticker, cached_df.index.min().strftime("%Y-%m-%d"), start_str)
+        try:
+            full = yf.download(ticker, period=period, interval="1d",
+                               auto_adjust=True, progress=False)
+            if full is not None and not full.empty:
+                if isinstance(full.columns, pd.MultiIndex):
+                    full.columns = full.columns.droplevel(1)
+                save_prices(ticker, full)
+                _set_meta(ticker, pd.Timestamp(full.index.min()).strftime("%Y-%m-%d"))
+                cached_df = get_cached_prices(ticker, start_str, end_str)
+            else:
+                _set_meta(ticker, None)  # nichts bekommen -> erst in 30 Tagen erneut
+        except Exception as e:
+            logger.warning("Front-Backfill fuer %s fehlgeschlagen: %s", ticker, e)
+            _set_meta(ticker, None)
 
     if cached_df is not None and len(cached_df) >= 20:
         # Pruefen ob Daten aktuell genug sind (letzter gecachter Tag)
