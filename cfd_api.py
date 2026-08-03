@@ -13,6 +13,7 @@ Endpoints:
 import json
 import os
 import secrets
+import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from cfd_portfolio import (
@@ -22,8 +23,8 @@ from cfd_portfolio import (
 PORT = 5051
 MAX_CONTENT_LENGTH = 1_048_576  # 1 MB Max-Request-Groesse
 
-# API-Key aus Umgebungsvariable oder zufaellig generiert
-API_KEY = os.environ.get("CFD_API_KEY") or secrets.token_urlsafe(32)
+# API-Key ist Pflicht: kein unsicherer oder operativ fragiler Fallback
+API_KEY = os.environ.get("CFD_API_KEY", "").strip()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -100,7 +101,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    if not os.environ.get("CFD_API_KEY"):
-        print(f"Kein CFD_API_KEY gesetzt, verwende generierten Key: {API_KEY[:8]}...")
+    if not API_KEY:
+        print("ERROR: CFD_API_KEY fehlt. Server startet aus Sicherheitsgruenden nicht.", file=sys.stderr)
+        raise SystemExit(1)
     print(f"CFD Portfolio API laeuft auf http://127.0.0.1:{PORT}")
     HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

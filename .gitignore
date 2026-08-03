@@ -2,6 +2,11 @@ output/
 logs/
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
 *.log
 *.csv
 *.html

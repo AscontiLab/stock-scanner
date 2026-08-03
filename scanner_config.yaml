@@ -41,6 +41,16 @@ cfd:
   short_score_cap: 7.5        # Short Score 8+ = 28% Win → Cap bei 7.5
   short_resolve_max_days: 5   # Shorts schneller expiren (17/23 Expired waren Shorts)
 
+  # --- Intraday-Override (15m-Bars) ---
+  # 15m-Bars haben kleinere ATR/ADX-Magnituden als Tagesbars.
+  # Werte werden vom cfd_intraday_scorer bevorzugt, sonst fallen sie auf cfd-Defaults zurueck.
+  intraday:
+    adx_min: 18           # statt 30 — ADX auf 15m bleibt meist <30
+    adx_overripe: 50      # statt 45 — auf 15m kann ADX hoeher peaken
+    atr_pct_min: 0.10     # statt 1.0 — 15m-ATR ist absolut kleiner
+    atr_pct_max: 5.0      # statt 8.0
+    vol_ratio_min: 1.0    # leicht entspannt — 15m-Vol schwankt staerker
+
 # --- Gewichtetes Scoring ---
 scoring:
   weights:
