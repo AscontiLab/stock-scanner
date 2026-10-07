@@ -1,0 +1,11 @@
+[Unit]
+Description=CFD Intraday Scanner — alle 15 min Mo–Fr
+Requires=stock-scanner-intraday.service
+
+[Timer]
+# Mo-Fr alle 15 Minuten zur :00, :15, :30, :45 (Scanner filtert selbst nach Trading-Hours)
+OnCalendar=Mon..Fri *:00/15
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Stock Scanner — CFD Intraday Scan (alle 15 min)
+After=network.target
+
+[Service]
+Type=oneshot
+User=claude-agent
+WorkingDirectory=/home/claude-agent/stock-scanner
+ExecStart=/home/claude-agent/stock-scanner/run_intraday_scanner.sh
+Environment=PYTHONUNBUFFERED=1
