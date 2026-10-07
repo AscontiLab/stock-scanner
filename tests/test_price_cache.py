@@ -134,7 +134,9 @@ def test_temporary_provider_failure_has_bounded_fallback(
         isolated_cache.return_value = pd.DataFrame() if failure == "empty" else None
     result = price_cache.get_prices("AAPL", "1y")
     if accepted:
-        pd.testing.assert_frame_equal(result, cached, check_freq=False, check_dtype=False)
+        # The requested year starts on 2025-10-07; older archive rows stay out.
+        expected = cached.loc["2025-10-07":"2026-10-07"]
+        pd.testing.assert_frame_equal(result, expected, check_freq=False, check_dtype=False)
     else:
         assert result is None
     isolated_cache.assert_called_once()

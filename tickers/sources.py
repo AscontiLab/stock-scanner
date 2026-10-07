@@ -127,6 +127,7 @@ def filter_valid_tickers(tickers: list, label: str) -> list:
     """
     Entfernt ungueltige Ticker (kein valides Symbolformat).
     Erlaubt Buchstaben/Ziffern sowie . und -; muss mit alnum starten.
+    Normalisiert bekannte Tickerwechsel, entfernt Delistings und Duplikate.
     """
     pattern = re.compile(r"^[A-Z0-9][A-Z0-9.\-]+$")
     valid = []
