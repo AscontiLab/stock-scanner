@@ -18,6 +18,8 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from price_data import current_prices_or_none, resolve_current_ticker
+
 # Preis-Cache: Reduziert yfinance API-Calls um ~80%
 try:
     from price_cache import get_prices as cached_get_prices
@@ -140,6 +142,9 @@ logging.basicConfig(
 
 def analyze_ticker(ticker: str, market: str, enforce_liquidity: bool = True) -> dict | None:
     """Download data and compute all signals. Returns result dict or None."""
+    ticker = resolve_current_ticker(ticker)
+    if ticker is None:
+        return None
     try:
         if _USE_PRICE_CACHE:
             df = cached_get_prices(ticker, period="1y")
@@ -171,6 +176,11 @@ def analyze_ticker(ticker: str, market: str, enforce_liquidity: bool = True) -> 
                 return None
         else:
             return None
+
+    # Also guard direct downloads and the exception fallback before any scoring.
+    df = current_prices_or_none(ticker, df)
+    if df is None or len(df) < 30:
+        return None
 
     close, volume, open_, high, low = df["Close"], df["Volume"], df["Open"], df["High"], df["Low"]
     current_price = float(close.iloc[-1])

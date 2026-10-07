@@ -8,6 +8,8 @@ import urllib.request
 
 import pandas as pd
 
+from price_data import resolve_current_ticker
+
 
 # ---------------------------------------------------------------------------
 # Fallback-Listen (statisch, falls Wikipedia nicht erreichbar)
@@ -135,7 +137,9 @@ def filter_valid_tickers(tickers: list, label: str) -> list:
             invalid += 1
             continue
         if pattern.match(t):
-            valid.append(t)
+            current = resolve_current_ticker(t)
+            if current is not None and current not in valid:
+                valid.append(current)
         else:
             invalid += 1
     if invalid:

@@ -21,6 +21,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test deps
-        run: pip install pytest requests
-      - name: Run explainability test
-        run: pytest tests/test_explainability.py
+        run: pip install pytest requests pandas yfinance pyyaml
+      - name: Run regression tests
+        run: pytest tests

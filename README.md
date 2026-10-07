@@ -174,6 +174,46 @@ Python 3.10+, Pakete: `yfinance`, `pandas`, `numpy`, `pyyaml`, `tqdm`, `requests
 - `run_resolve.sh` wartet max 30 Minuten auf den Scanner-Lock bevor es startet
 - `N8N_BASE_URL` ist per Env-Variable konfigurierbar (Fallback: `agents.umzwei.de`)
 
+### Kursalter und nicht mehr gehandelte Ticker
+
+`get_prices()` liefert nur Daten, deren letzter vollstaendiger Tageskurs maximal
+**5 Kalendertage** alt ist (Grenze inklusive, gemessen am Handelstag, nicht an
+`fetched_at`). Wochenenden, Feiertage und kurze Provider-Ausfaelle sind damit
+toleriert; dies ist eine feste Toleranz, kein Boersenkalender. Mit
+`get_prices(..., max_staleness_days=2)` kann ein Aufrufer die Grenze verschaerfen.
+
+Bei Exceptions, leeren Downloads oder nur historisch verfuegbaren Daten gilt
+dieselbe Grenze: zu alte Daten ergeben `None` und der Scanner ueberspringt den
+Titel vor den Indikatoren. Auch direkte Scanner-Downloads und dessen
+Exception-Fallback pruefen das Kursalter. Unvollstaendige Zeilen koennen eine
+alte Historie nicht kuenstlich auffrischen. Ablehnungen werden mit Symbol,
+letztem Kurstag und Altersgrenze geloggt; archivierte Cache-Zeilen bleiben erhalten.
+Der Front-Backfill fuer SMA200 bleibt aktiv, das Scoring selbst unveraendert.
+
+Verifizierte Sonderfaelle in `price_data.py` (weitere unbekannte Ausfaelle werden
+unabhaengig davon durch die allgemeine Altersgrenze abgesichert):
+
+| Altes Symbol | Ab Datum | Behandlung |
+|-------------|----------|------------|
+| BK | 21.05.2026 | Als BNY laden, cachen und ausgeben; alten BK-Cache nicht als BNY verwenden |
+| CTRA | 07.05.2026 | Nicht mehr handeln/scoren; keine Verknuepfung der CTRA- mit der DVN-Kurshistorie |
+| HOLX | 07.04.2026 | Privat uebernommen, nicht mehr handeln/scoren |
+
+Quellen: [BNY-Tickerwechsel](https://www.bny.com/corporate/global/en/about-us/newsroom/press-release/bny-announces-planned-change-of-stock-ticker-symbol-to-bny-130465.html),
+[Devon/Coterra-Merger](https://www.devonenergy.com/news/2026/Devon-Energy-and-Coterra-Energy-Complete-Merger),
+[Hologic-Uebernahme](https://www.hologic.com/about/press-release/blackstone-and-tpg-complete-acquisition-hologic).
+
+Regressionstests (isolierte SQLite-DB, feste Uhrzeit, kein Yahoo-Netzzugriff):
+
+```bash
+python -m pip install pytest requests pandas yfinance pyyaml
+python -m pytest tests
+```
+
+Die Tests decken Corporate Actions, einen temporaeren `YFRateLimitError`, leere
+Antworten, Altersgrenzen, historische Downloads, Front-Backfill und die
+Scanner-Fallbacks ab. Vorhandene Explainability-Tests laufen ebenfalls in CI.
+
 ## Investment-Portfolio Fallback (2026-04-10)
 
 - Der normale Scanner verwirft illiquide Titel weiterhin fuer **neue Trading-Signale** via `MIN_AVG_VOLUME`
